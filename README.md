@@ -15,13 +15,23 @@ You can find the Cornerstone documentation [on the website](https://cornerstonej
 
 The documentation is divided into several sections
 
+- **[📚 开发指南（中文）](./guides/README.md)** - 从零开始学习 Cornerstone3D
 - [Tutorial](https://cornerstonejs.org/docs/category/tutorials)
 - [Main Concepts](https://cornerstonejs.org/docs/category/concepts)
 - [Live Examples](https://www.cornerstonejs.org/docs/examples)
-- [API Reference](https://cornerstonejs.org/api)
+- [API Reference](https://www.cornerstonejs.org/api)
 - [How-to Guides](https://cornerstonejs.org/docs/category/how-to-guides)
 - [FAQ](https://cornerstonejs.org/docs/faq)
 - [How-to Contribute](https://cornerstonejs.org/docs/category/contributing)
+
+### 📘 中文开发指南
+
+我们提供了完整的中文开发指南，帮助您快速上手 Cornerstone3D：
+
+- **[开发指南](./guides/README.md)** - 完整的学习路径和教程
+- **架构文档** - 了解 Cornerstone3D 的核心架构和设计理念
+- **快速入门** - 在 30 分钟内搭建第一个影像查看器
+- **高级功能** - 学习标注、测量、3D 渲染等高级功能
 
 ## Support
 

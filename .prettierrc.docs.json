@@ -1,0 +1,28 @@
+{
+  "printWidth": 100,
+  "proseWrap": "preserve",
+  "tabWidth": 2,
+  "semi": false,
+  "singleQuote": true,
+  "arrowParens": "avoid",
+  "plugins": ["@prettier/plugin-oxc"],
+  "overrides": [
+    {
+      "files": "*.md",
+      "options": {
+        "proseWrap": "never",
+        "printWidth": 100,
+        "tabWidth": 2
+      }
+    },
+    {
+      "files": "guides/**/*.md",
+      "options": {
+        "proseWrap": "never",
+        "printWidth": 100,
+        "tabWidth": 2,
+        "semi": false
+      }
+    }
+  ]
+}

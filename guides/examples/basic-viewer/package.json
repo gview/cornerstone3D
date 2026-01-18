@@ -1,0 +1,46 @@
+{
+  "name": "cornerstone3d-basic-viewer-example",
+  "version": "1.0.0",
+  "description": "Cornerstone3D 基础影像查看器示例",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+  },
+  "dependencies": {
+    "@cornerstonejs/core": "^4.15.12",
+    "@cornerstonejs/tools": "^4.15.12",
+    "@cornerstonejs/dicom-image-loader": "^4.15.12",
+    "dicom-parser": "^1.8.21",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@originjs/vite-plugin-commonjs": "^1.0.3",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "prettier": "^3.8.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "keywords": [
+    "cornerstone3d",
+    "dicom",
+    "medical-imaging",
+    "react",
+    "typescript",
+    "vite"
+  ],
+  "author": "Cornerstone3D Team",
+  "license": "MIT"
+}

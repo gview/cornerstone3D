@@ -1,0 +1,601 @@
+# Cornerstone3D 影像浏览器开发指南 - 文档结构契约
+
+**Version**: 1.0.0
+**Date**: 2025-01-18
+**Feature**: 001-image-viewer-guide
+
+## 契约概述
+
+本契约定义了 Cornerstone3D 影像浏览器开发指南的文档结构、文件组织、命名规范和内容标准。所有参与文档编写和维护的人员必须遵守此契约。
+
+---
+
+## 目录结构契约
+
+### 根目录结构
+
+```yaml
+guides/:
+  type: directory
+  description: Cornerstone3D 开发指南根目录
+  required_files:
+    - README.md
+  required_subdirectories:
+    - architecture/
+    - getting-started/
+    - advanced/
+    - examples/
+    - troubleshooting/
+```
+
+### 子目录契约
+
+#### architecture/ - 架构文档
+
+```yaml
+architecture/:
+  type: directory
+  description: Cornerstone3D 架构详解文档
+  required_files:
+    - filename: overview.md
+      title: Cornerstone3D 概述
+      order: 1
+    - filename: monorepo-structure.md
+      title: Monorepo 结构详解
+      order: 2
+    - filename: core-packages.md
+      title: 核心包职责说明
+      order: 3
+    - filename: architectural-concepts.md
+      title: 架构概念
+      order: 4
+    - filename: dependencies.md
+      title: 外部依赖说明
+      order: 5
+  optional_files:
+    - filename: design-principles.md
+      title: 设计原则
+    - filename: performance-considerations.md
+      title: 性能考虑
+```
+
+#### getting-started/ - 快速入门
+
+```yaml
+getting-started/:
+  type: directory
+  description: 快速入门指南
+  required_files:
+    - filename: project-setup.md
+      title: 项目初始化
+      order: 1
+      estimated_time: "10 分钟"
+    - filename: initialization.md
+      title: Cornerstone3D 初始化
+      order: 2
+      estimated_time: "15 分钟"
+    - filename: first-viewer.md
+      title: 第一个影像查看器
+      order: 3
+      estimated_time: "20 分钟"
+    - filename: basic-interactions.md
+      title: 基本交互
+      order: 4
+      estimated_time: "15 分钟"
+  optional_files:
+    - filename: framework-integration.md
+      title: 框架集成
+      estimated_time: "10 分钟"
+```
+
+#### advanced/ - 高级指南
+
+```yaml
+advanced/:
+  type: directory
+  description: 高级功能指南
+  required_files:
+    - filename: annotations.md
+      title: 标注工具
+      order: 1
+      estimated_time: "30 分钟"
+    - filename: measurements.md
+      title: 测量工具
+      order: 2
+      estimated_time: "25 分钟"
+    - filename: volume-rendering.md
+      title: 3D 体渲染
+      order: 3
+      estimated_time: "40 分钟"
+    - filename: multi-viewport.md
+      title: 多视口同步
+      order: 4
+      estimated_time: "30 分钟"
+    - filename: performance-optimization.md
+      title: 性能优化
+      order: 5
+      estimated_time: "35 分钟"
+    - filename: ai-integration.md
+      title: AI 集成
+      order: 6
+      estimated_time: "45 分钟"
+  optional_files:
+    - filename: custom-tools.md
+      title: 自定义工具
+      estimated_time: "60 分钟"
+    - filename: advanced-loaders.md
+      title: 高级加载器
+      estimated_time: "40 分钟"
+```
+
+#### examples/ - 完整示例
+
+```yaml
+examples/:
+  type: directory
+  description: 完整的可运行示例代码
+  required_subdirectories:
+    - basic-viewer/
+    - advanced-viewer/
+```
+
+#### troubleshooting/ - 故障排查
+
+```yaml
+troubleshooting/:
+  type: directory
+  description: 故障排查和调试技巧
+  required_files:
+    - filename: common-errors.md
+      title: 常见错误及解决方案
+    - filename: debugging-tips.md
+      title: 调试技巧
+  optional_files:
+    - filename: faq.md
+      title: 常见问题
+```
+
+---
+
+## 文档命名规范
+
+### 文件名规范
+
+```yaml
+naming_convention:
+  format: "kebab-case.md"
+  rules:
+    - 使用小写字母
+    - 多个单词用连字符（-）连接
+    - 必须以 .md 结尾
+    - 不包含空格或特殊字符
+  examples:
+    - "project-setup.md"
+    - "volume-rendering.md"
+    - "performance-optimization.md"
+  anti_examples:
+    - "ProjectSetup.md"        # 错误：大写字母
+    - "project setup.md"       # 错误：包含空格
+    - "project_setup.md"       # 错误：使用下划线
+```
+
+### 目录名规范
+
+```yaml
+directory_naming_convention:
+  format: "kebab-case"
+  rules:
+    - 使用小写字母
+    - 多个单词用连字符（-）连接
+    - 不包含空格或特殊字符
+  examples:
+    - "getting-started/"
+    - "advanced/"
+```
+
+---
+
+## 文档元数据契约
+
+### Frontmatter 规范
+
+每个 Markdown 文件必须包含 frontmatter 元数据块：
+
+```yaml
+frontmatter_schema:
+  type: object
+  required:
+    - id
+    - title
+    - category
+    - order
+    - description
+  properties:
+    id:
+      type: string
+      description: 文档唯一标识符（kebab-case）
+      example: "project-setup"
+    title:
+      type: string
+      description: 文档标题（中文）
+      example: "项目初始化"
+    category:
+      type: string
+      enum: [architecture, getting-started, advanced, examples, troubleshooting]
+      description: 文档分类
+    order:
+      type: integer
+      minimum: 1
+      description: 同类文档中的顺序
+    description:
+      type: string
+      description: 文档简短描述（中文）
+      example: "如何创建和初始化一个新的 Cornerstone3D 项目"
+    prerequisites:
+      type: array
+      items:
+        type: string
+      description: 前置文档 ID 列表
+      example: ["project-setup", "initialization"]
+    estimated_time:
+      type: string
+      pattern: "^\\d+\\s+(分钟|小时)$"
+      description: 预计阅读/完成时间
+      example: "10 分钟"
+    difficulty:
+      type: string
+      enum: [beginner, intermediate, advanced]
+      description: 难度级别
+    tags:
+      type: array
+      items:
+        type: string
+      description: 标签列表
+      example: ["项目", "初始化", "Vite"]
+```
+
+### Frontmatter 示例
+
+```yaml
+---
+id: project-setup
+title: 项目初始化
+category: getting-started
+order: 1
+description: 如何创建和初始化一个新的 Cornerstone3D 项目
+prerequisites: []
+estimated_time: "10 分钟"
+difficulty: beginner
+tags: ["项目", "初始化", "Vite"]
+---
+```
+
+---
+
+## 内容结构契约
+
+### 文档章节结构
+
+```yaml
+document_structure:
+  required_sections:
+    - section: 简介
+      required: true
+      description: 简要介绍本文档的内容和目标
+    - section: 前置条件
+      required: false
+      description: 列出阅读本文档需要的预备知识
+    - section: 步骤
+      required: true
+      description: 详细的操作步骤或说明
+    - section: 验证
+      required: true
+      description: 如何验证操作是否成功
+    - section: 常见问题
+      required: false
+      description: 相关的常见问题和解决方案
+    - section: 相关资源
+      required: true
+      description: 相关文档、API 参考等链接
+```
+
+### 标题层级规范
+
+```yaml
+heading_levels:
+  h1:
+    usage: "禁止使用（文档标题由 frontmatter 定义）"
+  h2:
+    usage: "主要章节（如：简介、步骤、验证）"
+    example: "## 简介"
+  h3:
+    usage: "次级章节"
+    example: "### 安装依赖"
+  h4:
+    usage: "三级章节"
+    example: "#### 使用 npm"
+  h5:
+    usage: "四级章节（尽量避免）"
+    example: "##### Windows 系统"
+  h6:
+    usage: "避免使用"
+```
+
+---
+
+## 代码示例契约
+
+### 代码块规范
+
+```yaml
+code_block_standards:
+  language:
+    requirement: "必须指定代码语言"
+    valid_languages:
+      - typescript
+      - javascript
+      - bash
+      - yaml
+      - json
+  comments:
+    requirement: "必须包含中文注释"
+    coverage: "关键逻辑必须注释"
+  formatting:
+    tool: "Prettier"
+    requirement: "必须通过 Prettier 格式化"
+  type_safety:
+    requirement: "TypeScript 代码必须通过类型检查"
+    command: "tsc --noEmit"
+```
+
+### 代码块示例
+
+```markdown
+\`\`\`typescript
+// 导入 Cornerstone3D 核心库
+import { init, RenderingEngine, Enums } from '@cornerstonejs/core';
+import { addTool } from '@cornerstonejs/tools';
+
+// 初始化 Cornerstone3D
+async function initializeCornerstone() {
+  await init({
+    // 配置渲染引擎模式
+    core: {
+      renderingEngineMode: Enums.RenderingEngineMode.CONTEXT_POOL,
+    },
+  });
+  console.log('Cornerstone3D 初始化成功');
+}
+\`\`\`
+```
+
+---
+
+## 图片和图表契约
+
+### 图片规范
+
+```yaml
+image_standards:
+  formats:
+    - png
+    - jpg
+    - svg
+  location:
+    - 与文档同级的 images/ 目录
+    - 或项目根目录的 guides/images/ 目录
+  naming:
+    pattern: "kebab-case.{ext}"
+    example: "architecture-overview.png"
+  attributes:
+    alt: "必填，中文描述"
+    caption: "可选，图片说明"
+  size:
+    max_width: "1200px"
+    max_file_size: "500KB"
+```
+
+### 图表规范
+
+```yaml
+diagram_standards:
+  tool: "Mermaid.js"
+  supported_types:
+    - flowchart      # 流程图
+    - sequence       # 序列图
+    - class          # 类图
+    - state          # 状态图
+    - er             # 实体关系图
+  syntax:
+    requirement: "必须符合 Mermaid 语法规范"
+  caption:
+    requirement: "必须包含中文说明"
+```
+
+---
+
+## 链接规范
+
+### 内部链接
+
+```yaml
+internal_links:
+  format: "[文本](路径)"
+  relative_paths:
+    preference: "使用相对路径"
+    example: "[项目初始化](getting-started/project-setup.md)"
+  anchors:
+    format: "[文本](路径#锚点)"
+    example: "[安装依赖](project-setup.md#安装依赖)"
+  validation:
+    requirement: "所有内部链接必须有效"
+```
+
+### 外部链接
+
+```yaml
+external_links:
+  format: "[文本](URL)"
+  examples:
+    - "[Cornerstone3D 官方文档](https://www.cornerstonejs.org/)"
+    - "[React 文档](https://react.dev/)"
+  validation:
+    requirement: "所有外部链接必须可访问"
+  nofollow:
+    usage: "非权威网站添加 rel=\"nofollow\""
+```
+
+---
+
+## 质量标准契约
+
+### 文档质量检查清单
+
+```yaml
+quality_checklist:
+  language:
+    - item: "文档使用中文编写"
+      required: true
+    - item: "技术术语首次出现时提供中文解释"
+      required: true
+  structure:
+    - item: "包含 frontmatter 元数据"
+      required: true
+    - item: "标题层级正确（h2-h4）"
+      required: true
+    - item: "包含目录（可选）"
+      required: false
+  content:
+    - item: "代码示例包含中文注释"
+      required: true
+    - item: "代码示例可以直接运行"
+      required: true
+    - item: "包含验证步骤"
+      required: true
+    - item: "包含常见问题和解决方案"
+      required: false
+  links:
+    - item: "所有链接有效"
+      required: true
+    - item: "内部链接使用相对路径"
+      required: true
+  formatting:
+    - item: "通过 Prettier 格式化"
+      required: true
+    - item: "没有尾随空格"
+      required: true
+    - item: "列表格式正确"
+      required: true
+```
+
+---
+
+## 代码示例目录契约
+
+### 示例项目结构
+
+```yaml
+example_project_structure:
+  root: "guides/examples/{example-id}/"
+  required_files:
+    - filename: README.md
+      description: 示例说明、运行步骤、预期结果
+    - filename: package.json
+      description: 依赖和脚本
+    - filename: vite.config.ts
+      description: Vite 配置（如果使用 Vite）
+    - filename: tsconfig.json
+      description: TypeScript 配置
+    - filename: index.html
+      description: HTML 入口
+  required_directories:
+    - path: src/
+      description: 源代码目录
+    - path: public/
+      description: 静态资源目录
+  optional_directories:
+    - path: src/cornerstone/
+      description: Cornerstone3D 相关代码
+    - path: src/types/
+      description: 类型定义
+    - path: public/dicom/
+      description: 示例 DICOM 文件（小文件）
+```
+
+### 示例项目 README 规范
+
+```yaml
+example_readme_schema:
+  required_sections:
+    - section: 简介
+      content: "示例的简要说明"
+    - section: 功能特性
+      content: "展示的 Cornerstone3D 功能列表"
+    - section: 技术栈
+      content: "使用的框架和库"
+    - section: 运行步骤
+      content: "如何运行示例"
+    - section: 预期结果
+      content: "运行后应该看到什么"
+    - section: 代码结构
+      content: "主要文件和目录的说明"
+    - section: 学习要点
+      content: "从本示例中学到的关键概念"
+```
+
+---
+
+## 版本控制契约
+
+### Git 提交规范
+
+```yaml
+git_commit_convention:
+  format: "{type}(scope): {subject}"
+  types:
+    - feat: "新功能（新文档或新章节）"
+    - docs: "文档更新（修改现有文档）"
+    - fix: "修复（修复文档错误或broken link）"
+    - style: "格式化（代码格式、标点符号等）"
+    - refactor: "重构（重构文档结构）"
+    - chore: "构建/工具（更新构建工具、依赖等）"
+  examples:
+    - "feat(guides): 添加性能优化文档"
+    - "docs(getting-started): 修正初始化步骤的错误"
+    - "fix(examples): 修复 basic-viewer 示例的类型错误"
+```
+
+---
+
+## 合规性声明
+
+所有参与文档编写的人员必须遵守以下原则：
+
+1. **中文优先**: 所有文档使用中文编写（宪章 I）
+2. **模块化**: 文档结构清晰，模块化组织（宪章 II）
+3. **类型安全**: 代码示例使用 TypeScript，通过类型检查（宪章 III）
+4. **质量保证**: 文档必须通过质量检查清单验证（宪章 VI）
+
+---
+
+## 契约版本历史
+
+| 版本 | 日期 | 变更说明 |
+|------|------|----------|
+| 1.0.0 | 2025-01-18 | 初始版本，定义文档结构和质量标准 |
+
+---
+
+## 变更流程
+
+1. 提出变更建议（Issue 或 PR）
+2. 讨论和审核
+3. 更新契约版本号
+4. 更新本文档
+5. 通知所有文档维护者
+
+---
+
+**契约所有者**: Cornerstone3D 文档团队
+**最后更新**: 2025-01-18
+**下次审查**: 2025-04-18（每季度审查）

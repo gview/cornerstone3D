@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    /* 基本选项 */
+    "target": "ES2020", // 使用 ES2020 作为目标版本
+    "lib": ["ES2020", "DOM", "DOM.Iterable"], // 包含 ES2020 和 DOM 类型定义
+    "module": "ESNext", // 使用 ES Next 模块系统
+    "moduleResolution": "bundler", // 使用 bundler 模式解析模块
+    "jsx": "react-jsx", // 使用 React 17+ 的 JSX 转换
+    "allowImportingTsExtensions": true, // 允许导入 .ts 文件
+
+    /* 严格类型检查 */
+    "strict": true, // 启用所有严格类型检查选项
+    "noUnusedLocals": true, // 检查未使用的局部变量
+    "noUnusedParameters": true, // 检查未使用的参数
+    "noFallthroughCasesInSwitch": true, // 检查 switch 语句中的 fallthrough
+    "noImplicitReturns": true, // 检查函数中所有代码路径是否都有返回值
+
+    /* 模块解析选项 */
+    "allowSyntheticDefaultImports": true, // 允许合成默认导入
+    "esModuleInterop": true, // 启用 ES 模块互操作性
+    "resolveJsonModule": true, // 允许导入 .json 文件
+    "isolatedModules": true, // 确保每个文件都可以单独转译
+
+    /* 其他选项 */
+    "skipLibCheck": true, // 跳过库文件的类型检查（提高编译速度）
+    "forceConsistentCasingInFileNames": true, // 强制文件名大小写一致
+
+    /* 路径别名（可选） */
+    "baseUrl": ".", // 基准路径
+    "paths": {
+      "@/*": ["src/*"] // 路径别名：@/ 指向 src/
+    }
+  },
+  "include": [
+    "src/**/*", // 包含 src 目录下的所有文件
+    "vite.config.ts" // 包含 Vite 配置文件
+  ],
+  "exclude": [
+    "node_modules", // 排除 node_modules
+    "dist" // 排除构建输出目录
+  ],
+  "references": [
+    // 如果需要引用其他项目，可以在这里添加项目引用
+  ]
+}

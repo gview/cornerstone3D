@@ -1,0 +1,52 @@
+# Ignore files for Prettier
+
+# Dependencies
+node_modules/
+packages/
+dist/
+build/
+*.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentation
+guides/examples/
+guides/*/node_modules/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Build outputs
+*.tsbuildinfo
+*.d.ts.map
+*.js.map
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Minified files
+*.min.js
+*.min.css
+
+# Generated files
+*.generated.*
