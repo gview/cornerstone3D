@@ -25,6 +25,7 @@ import { useSlabThickness } from './hooks/useSlabThickness';
 import { useObliqueRotation } from './hooks/useObliqueRotation';
 import { initCornerstone } from './cornerstone/init';
 import AnnotationsPanel from './components/AnnotationsPanel';
+import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
 import type { IVolume } from '@cornerstonejs/core/types';
 
 const { MouseBindings, KeyboardBindings, ToolModes } = csToolsEnums;
@@ -49,6 +50,9 @@ function MPRViewer() {
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const [showCrosshairs, setShowCrosshairs] = useState<boolean>(true);
   const [isPanelDocked, setIsPanelDocked] = useState<boolean>(false);
+  const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
+  const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
+  const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
 
   // 工具模式状态：记录每个工具的当前模式
   const [toolModes, setToolModes] = useState<Record<string, string>>({
@@ -183,6 +187,53 @@ function MPRViewer() {
       );
       console.log('✅ 所有 DICOM 元数据加载完成');
 
+      // 提取序列信息并添加到列表
+      const seriesInfoMap = new Map<string, SeriesInfo>();
+
+      for (const imageId of newImageIds) {
+        try {
+          const seriesModule = metaData.get('seriesModule', imageId);
+          const generalSeriesModule = metaData.get('generalSeriesModule', imageId);
+
+          if (seriesModule && generalSeriesModule) {
+            const seriesInstanceUID = seriesModule.seriesInstanceUID;
+
+            if (!seriesInfoMap.has(seriesInstanceUID)) {
+              seriesInfoMap.set(seriesInstanceUID, {
+                seriesInstanceUID,
+                seriesNumber: generalSeriesModule.seriesNumber || 0,
+                seriesDescription: generalSeriesModule.seriesDescription || '',
+                modality: generalSeriesModule.modality || 'UN',
+                numberOfImages: 1,
+                imageIds: [imageId],
+                StudyInstanceUID: seriesModule.StudyInstanceUID,
+              });
+            } else {
+              const seriesInfo = seriesInfoMap.get(seriesInstanceUID)!;
+              seriesInfo.imageIds.push(imageId);
+              seriesInfo.numberOfImages = seriesInfo.imageIds.length;
+            }
+          }
+        } catch (error) {
+          console.warn(`无法提取 ${imageId} 的序列信息:`, error);
+        }
+      }
+
+      // 将新的序列添加到列表中
+      const newSeriesList = Array.from(seriesInfoMap.values());
+      setSeriesList((prev) => {
+        // 合并序列列表，避免重复
+        const existingUIDs = new Set(prev.map(s => s.seriesInstanceUID));
+        const uniqueNewSeries = newSeriesList.filter(s => !existingUIDs.has(s.seriesInstanceUID));
+        return [...prev, ...uniqueNewSeries];
+      });
+
+      // 如果有多个序列，自动显示序列面板
+      if (newSeriesList.length > 0) {
+        setShowSeriesPanel(true);
+        console.log(`✅ 已添加 ${newSeriesList.length} 个序列到列表`);
+      }
+
       // 创建体积数据
       const volumeId = `my-volume-id-${Date.now()}`;
       console.log('📦 正在创建体积数据...');
@@ -196,6 +247,11 @@ function MPRViewer() {
       console.log('✅ 开始加载体积数据...');
 
       setVolume(volume);
+
+      // 设置当前加载的序列
+      if (newSeriesList.length > 0) {
+        setCurrentSeriesUID(newSeriesList[0].seriesInstanceUID);
+      }
 
       // 等待 DOM 更新，确保视口元素已渲染
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -414,6 +470,49 @@ function MPRViewer() {
     if (!files) return;
 
     await loadLocalFiles(files);
+  };
+
+  // 处理加载序列
+  const handleLoadSeries = async (seriesInfo: SeriesInfo) => {
+    if (!renderingEngine) {
+      console.warn('渲染引擎未初始化');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log(`🔄 正在切换到序列 ${seriesInfo.seriesNumber}: ${seriesInfo.seriesDescription}`);
+
+      // 使用序列的 imageIds 创建新的体积数据
+      const volumeId = `volume-${seriesInfo.seriesInstanceUID}`;
+      const newVolume = await volumeLoader.createAndCacheVolume(volumeId, {
+        imageIds: seriesInfo.imageIds,
+      });
+
+      newVolume.load();
+
+      // 为所有视口设置新的 volume
+      await setVolumesForViewports(
+        renderingEngine,
+        [{ volumeId }],
+        ['AXIAL', 'SAGITTAL', 'CORONAL']
+      );
+
+      // 更新当前序列
+      setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
+      setImageIds(seriesInfo.imageIds);
+      setVolume(newVolume as any); // 类型转换以避免 TypeScript 错误
+
+      // 重新渲染所有视口
+      renderingEngine.renderViewports(['AXIAL', 'SAGITTAL', 'CORONAL']);
+
+      console.log(`✅ 已切换到序列 ${seriesInfo.seriesNumber}`);
+    } catch (error) {
+      console.error('❌ 切换序列失败:', error);
+      setError(`切换序列失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // 处理层厚变化
@@ -729,6 +828,15 @@ function MPRViewer() {
               已加载 {imageIds.length} 张文件
             </span>
           )}
+          {seriesList.length > 0 && (
+            <button
+              onClick={() => setShowSeriesPanel(!showSeriesPanel)}
+              className={showSeriesPanel ? 'active-button' : ''}
+              title={showSeriesPanel ? '隐藏序列面板' : '显示序列面板'}
+            >
+              📚 序列 ({seriesList.length})
+            </button>
+          )}
         </div>
 
         <div className="toolbar-group">
@@ -933,6 +1041,16 @@ function MPRViewer() {
           onPositionChange={handlePanelPositionChange}
         />
       </div>
+
+      {/* 序列面板 */}
+      {showSeriesPanel && seriesList.length > 0 && (
+        <SeriesPanel
+          seriesList={seriesList}
+          currentSeriesUID={currentSeriesUID}
+          onLoadSeries={handleLoadSeries}
+          onClose={() => setShowSeriesPanel(false)}
+        />
+      )}
 
       {/* 控制面板 - 始终在底部 */}
       <div className="control-panel">
