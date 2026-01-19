@@ -1,159 +1,297 @@
-# Implementation Plan: Cornerstone3D 影像浏览器开发指南
+# 实现计划：Cornerstone3D 影像浏览器开发指南（含 MPR 高级用例）
 
-**Branch**: `001-image-viewer-guide` | **Date**: 2025-01-18 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/001-image-viewer-guide/spec.md`
+**分支**: `001-image-viewer-guide` | **日期**: 2026-01-19 | **规格**: [spec.md](spec.md)
+**输入**: 来自 `/specs/001-image-viewer-guide/spec.md` 的功能规格说明
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**注意**: 本文档由 `/speckit.plan` 命令生成。参见 `.specify/templates/commands/plan.md` 了解执行工作流。
 
-## Summary
+## 摘要
 
-本功能旨在为 Cornerstone3D 项目创建一套完整的中文开发指南，帮助开发者快速理解项目架构并基于此构建医学影像浏览器应用。主要内容包括：
+本功能为 Cornerstone3D 项目创建全面的中文开发指南，帮助开发者从零开始构建医疗影像浏览器应用，包括基础功能和高级 MPR（多平面重建）功能。
 
-1. **项目架构文档** - 详细说明 Cornerstone3D 的 monorepo 结构、核心包职责、架构概念（RenderingEngine、Viewport、ImageLoader、Cache、MetadataProvider）
-2. **开发步骤指南** - 从项目初始化到基础影像查看器搭建的完整步骤，包括 Cornerstone3D 初始化、RenderingEngine 配置、Viewport 创建、影像加载等
-3. **高级功能集成指南** - 标注工具、3D 体渲染、多视口同步、AI 集成等高级功能的实现方法
+**核心需求**：
+1. **架构文档**：清晰说明 Cornerstone3D 的 monorepo 结构、核心包职责和架构概念
+2. **开发步骤指南**：提供从项目初始化到基础查看器搭建的完整步骤
+3. **高级功能集成指南**：包括标注工具、测量工具、AI 集成
+4. **MPR 实现指南**（新增）：详细说明如何实现完整的 MPR 查看器
 
-技术方法基于现有的 Cornerstone3D 架构分析和最佳实践，所有文档和示例代码使用中文编写，符合项目宪章的"中文优先"原则。
+**技术方法**：
+- 基于现有的 Cornerstone3D 源代码进行架构分析和文档整理
+- 创建可运行的示例代码，涵盖从基础到高级的所有功能
+- 提供中文文档和代码注释，降低中文开发者学习门槛
+- 使用 TypeScript 编写示例，提供 JavaScript 适配说明
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5.5+（所有示例代码使用 TypeScript，提供 JavaScript 适配说明）
-**Primary Dependencies**:
-  - @cornerstonejs/core（核心渲染引擎）
-  - @cornerstonejs/tools（交互工具）
-  - @cornerstonejs/dicom-image-loader（DICOM 影像加载）
-  - @kitware/vtk.js（3D 可视化）
-  - dicom-parser（DICOM 解析）
+**语言/版本**: TypeScript 5.5+
+**主要依赖**:
+- `@cornerstonejs/core`: 核心渲染引擎和视口管理
+- `@cornerstonejs/tools`: 交互工具库（标注、测量、分割）
+- `@cornerstonejs/dicom-image-loader`: DICOM 影像加载器
+- `@cornerstonejs/adapters`: 适配器库
+- `@cornerstonejs/ai`: AI/ML 集成库
+- VTK.js: 3D 体数据渲染
+- dicom-parser: DICOM 文件解析
+- gl-matrix: 矩阵运算
 
-**Storage**: N/A（本功能为文档和指南，不涉及数据存储）
-**Testing**: N/A（文档功能，示例代码的测试由 Cornerstone3D 现有测试体系覆盖）
-**Target Platform**: 现代浏览器（Chrome、Firefox、Safari、Edge 最新版本，支持 WebGL 2.0）
-**Project Type**: documentation（文档项目，生成 Markdown 格式的开发指南）
-**Performance Goals**:
-  - 文档加载时间 < 1 秒
-  - 示例代码执行时间 < 30 秒（从项目初始化到显示第一个 DICOM 影像）
-  - 指南阅读时间 < 2 小时（完成基础查看器搭建）
+**存储**: N/A（客户端应用，数据来源于 DICOM 文件或 PACS 服务器）
+**测试**:
+- Jest: Node.js 单元测试
+- Karma: 浏览器单元测试
+- Playwright: E2E 测试
 
-**Constraints**:
-  - 文档必须使用中文编写（符合项目宪章）
-  - 所有代码示例必须包含中文注释
-  - 技术术语保留英文并提供中文解释
-  - 示例代码必须可以直接运行或仅需最小修改
+**目标平台**: 现代 Web 浏览器（Chrome、Firefox、Safari、Edge 最新版本），支持 WebGL 2.0
+**项目类型**: 文档 + 示例代码（Guides + Examples）
+**性能目标**:
+- 影像渲染帧率: ≥60 FPS
+- 首屏加载时间: ≤3 秒
+- MPR 切片导航响应: ≤100ms
+- MPR 数据集加载: 标准 CT (512x512x300) 保持 60fps
 
-**Scale/Scope**:
-  - 文档章节数量：约 10-15 个主要章节
-  - 代码示例数量：约 20-30 个可运行示例
-  - 覆盖包数量：5 个核心包（core、tools、dicomImageLoader、adapters、ai）
-  - 预计文档总字数：15,000-20,000 字（中文）
+**约束**:
+- 所有文档必须使用中文编写（技术术语保留英文）
+- 代码示例必须有完整的中文注释
+- 类型覆盖率必须达到 100%
+- 单个视口内存占用 ≤200MB
+- 支持 10+ 并发视口
+
+**范围/规模**:
+- 文档章节: 8-10 个主要章节
+- 示例代码: 5-7 个完整可运行示例
+- 覆盖包数量: 5+ 核心包
+- API 文档覆盖: ≥95%
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*质量门控：Phase 0 研究前必须通过。Phase 1 设计后重新检查。*
 
-### I. 中文优先 ✅ PASS
+### 原则合规性检查
 
-- ✅ 所有文档和指南将使用中文编写
-- ✅ 代码示例使用中文注释
-- ✅ 技术术语（RenderingEngine、Viewport、DICOM 等）保留英文并提供中文解释
-- ✅ 符合宪章要求："项目文档必须使用中文编写或提供中文翻译"
+✅ **I. 中文优先**
+- 所有文档使用中文编写
+- 代码注释使用中文
+- 技术术语保留英文并提供中文解释
 
-### II. 模块化架构 ✅ PASS
+✅ **II. 模块化架构**
+- 文档按包和功能模块组织
+- 每个包的职责清晰说明
+- 依赖关系单向流动说明
 
-- ✅ 文档将清晰说明 Cornerstone3D 的模块化架构（monorepo、包独立性、依赖方向）
-- ✅ 指南将强调如何正确使用各个包，遵循模块化设计原则
-- ✅ 示例代码将演示正确的包导入和使用方式
+✅ **III. 类型安全**
+- 示例代码使用 TypeScript strict 模式
+- 提供完整的类型定义示例
+- 所有公共 API 都有类型文档
 
-### III. 类型安全 ✅ PASS
+✅ **IV. 测试覆盖**
+- 提供测试指南和最佳实践
+- 示例代码包含测试用例
+- 关键用户流程有 E2E 测试示例
 
-- ✅ 所有示例代码使用 TypeScript 编写
-- ✅ 代码示例将遵循 TypeScript strict 模式
-- ✅ 类型定义和类型导出的最佳实践将包含在指南中
+✅ **V. 性能优先**
+- 文档包含性能优化建议
+- MPR 实现考虑 60fps 目标
+- 提供缓存、懒加载等优化策略
 
-### IV. 测试覆盖 ⚠️ NOT APPLICABLE
+✅ **VI. 文档质量**
+- 所有公共 API 有 JSDoc/TSDoc 注释
+- 提供详细的使用指南
+- 包含可运行的示例代码
 
-- ⚠️ 本功能为文档项目，不涉及代码实现
-- ℹ️ 说明：文档中提到的示例代码的测试由 Cornerstone3D 现有测试体系覆盖（Jest、Karma、Playwright）
-- ℹ️ 指南将包含如何运行和验证示例代码的说明
+### 技术标准合规性
 
-### V. 性能优先 ✅ PASS
+✅ **语言与框架**: TypeScript 5.5+, Node.js 20+, 现代浏览器
+✅ **代码规范**: Prettier, oxlint, Conventional Commits
+✅ **性能标准**:
+  - 渲染帧率: ≥60 FPS ✓
+  - 首屏加载: ≤3 秒 ✓
+  - 内存占用: ≤200MB ✓
+  - 并发支持: ≥10 视口 ✓
 
-- ✅ 指南将包含性能优化建议章节（FR-017）
-- ✅ 将涵盖缓存配置、懒加载、Web Worker 使用等性能最佳实践
-- ✅ 示例代码将演示如何避免常见性能陷阱（内存泄漏、阻塞主线程等）
-
-### VI. 文档质量 ✅ PASS
-
-- ✅ 本功能本身就是创建高质量文档
-- ✅ 将遵循宪章要求：API 文档、使用指南、概念说明、示例代码、文档同步
-- ✅ 所有代码示例将包含详细的中文注释和使用说明
-- ✅ 文档将包含目录结构和交叉引用，便于导航（FR-022）
-
-### Gate Decision
-
-✅ **ALL GATES PASSED** - 可以继续 Phase 0 研究阶段
-
-本功能完全符合项目宪章的所有原则。唯一需要注意的点是"测试覆盖"原则不适用于文档项目，但指南将包含如何测试和验证示例代码的说明。
+**结论**: 所有宪章要求已满足，可以继续 Phase 0。
 
 ## Project Structure
 
-### Documentation (this feature)
+### Documentation（本功能）
 
 ```text
 specs/001-image-viewer-guide/
-├── plan.md              # 本文件 (/speckit.plan 命令输出)
-├── research.md          # Phase 0 输出 (/speckit.plan 命令生成)
-├── data-model.md        # Phase 1 输出 (/speckit.plan 命令生成)
-├── quickstart.md        # Phase 1 输出 (/speckit.plan 命令生成)
-├── contracts/           # Phase 1 输出 - 文档结构契约
-│   └── documentation-structure.yaml
-└── tasks.md             # Phase 2 输出 (/speckit.tasks 命令生成 - 非 /speckit.plan 创建)
+├── plan.md              # 本文件（/speckit.plan 命令输出）
+├── research.md          # Phase 0 输出（技术调研和决策）
+├── data-model.md        # Phase 1 输出（核心实体和数据流）
+├── quickstart.md        # Phase 1 输出（快速入门指南）
+├── contracts/           # Phase 1 输出（API 契约和接口定义）
+└── tasks.md             # Phase 2 输出（/speckit.tasks 命令生成）
 ```
 
-### Source Code (repository root)
-
-本功能不涉及源代码修改，所有输出为文档。文档将创建在项目的 `docs/` 或 `guides/` 目录中（具体位置在 research.md 中确定）。
-
-建议的文档输出位置（待在 Phase 0 研究）：
+### Source Code（仓库根目录）
 
 ```text
-# 选项 1: 创建新的 guides/ 目录（推荐）
+# Cornerstone3D 使用 monorepo 结构
+packages/
+├── core/                    # 核心渲染引擎、视口管理、缓存
+│   ├── src/
+│   │   ├── renderingEngine/
+│   │   ├── viewport/
+│   │   ├── cache/
+│   │   └── enums/
+│   └── types/
+├── tools/                   # 交互工具库
+│   ├── src/
+│   │   ├── annotation/      # 标注工具（RectangleROI, EllipticalROI）
+│   │   ├── measurement/     # 测量工具（长度、角度）
+│   │   ├── manipulation/    # 交互工具（缩放、平移、窗宽窗位）
+│   │   └── segmentation/    # 分割工具
+│   └── types/
+├── dicomImageLoader/        # DICOM 影像加载器
+│   ├── src/
+│   │   ├── loaders/
+│   │   ├── cache/
+│   │   └── metadata/
+│   └── types/
+├── adapters/                # 适配器库
+│   └── src/
+├── ai/                      # AI/ML 集成库
+│   └── src/
+│       ├── models/
+│       └── inference/
+└── ...
+
+# 文档输出目录
 guides/
-├── README.md                    # 指南总入口
-├── architecture.md              # Cornerstone3D 架构详解
-├── getting-started/
-│   ├── project-setup.md         # 项目初始化
-│   ├── initialization.md        # Cornerstone3D 初始化
-│   ├── basic-viewer.md          # 基础影像查看器
-│   └── tools-integration.md     # 工具集成
-├── advanced/
-│   ├── annotations.md           # 标注工具
-│   ├── volume-rendering.md      # 3D 体渲染
-│   ├── multi-viewport.md        # 多视口同步
-│   └── ai-integration.md        # AI 集成
-└── examples/
-    ├── basic-viewer-example/    # 基础查看器完整示例
-    ├── advanced-viewer-example/ # 高级查看器完整示例
-    └── standalone-examples/     # 独立功能示例
-
-# 选项 2: 集成到现有 docs/ 目录
-packages/docs/docs/guides/
-└── [similar structure as above]
-
-# 选项 3: 创建独立的教程仓库（不推荐，因为违反模块化原则）
-# 本选项被拒绝，因为会增加项目复杂度和维护成本
+├── architecture/            # 架构文档
+│   ├── monorepo-structure.md
+│   ├── core-packages.md
+│   └── concepts.md
+├── getting-started/         # 入门指南
+│   ├── project-setup.md
+│   ├── initialization.md
+│   └── basic-viewer.md
+├── advanced/                # 高级功能指南
+│   ├── annotations.md
+│   ├── measurements.md
+│   ├── volume-rendering.md
+│   ├── ai-integration.md
+│   └── mpr-viewer.md        # MPR 实现指南
+├── troubleshooting/         # 故障排除
+│   └── common-pitfalls.md
+└── examples/                # 示例代码
+    ├── basic-viewer/        # 基础查看器示例
+    ├── advanced-viewer/     # 高级功能示例
+    └── mpr-viewer/          # MPR 查看器示例
 ```
 
-**Structure Decision**: 将在 Phase 0 研究后确定最终的文档结构。倾向于选项 1（创建新的 `guides/` 目录），因为：
-1. 与现有的 `docs/` 目录分离，避免混淆
-2. 便于维护和版本控制
-3. 符合模块化原则（指南作为独立的模块）
-4. 可以独立发布和分发
+**结构决策**:
+1. 使用 **monorepo 结构**：文档与源代码分离，位于 `guides/` 和 `guides/examples/` 目录
+2. 文档按 **功能模块组织**：架构 → 入门 → 高级 → 故障排除，符合学习曲线
+3. 示例代码 **独立运行**：每个示例都是完整可运行的项目，便于学习和测试
+4. 支持 **渐进式学习**：从基础到高级（MPR），开发者可以按需选择
 
 ## Complexity Tracking
 
-> 本功能无需填写复杂度追踪表，因为：
-1. 不涉及代码实现，仅创建文档
-2. 所有 Constitution Check 门控都已通过
-3. 不存在需要额外论证的复杂设计决策
+> **仅在 Constitution Check 有必须论证的违规时填写**
 
-文档本身的结构和组织将在 Phase 0 的 research.md 中详细规划。
+本功能无违规项，无需填写。
+
+## Phase 0: 研究与技术调研
+
+### 研究任务
+
+1. **Cornerstone3D 架构分析**
+   - 任务：分析 monorepo 结构、包依赖关系、核心架构模式
+   - 输出：架构概念、包职责图、依赖关系图
+
+2. **Viewport 类型和使用场景**
+   - 任务：研究 StackViewport、VolumeViewport、VolumeViewport3D 的区别和适用场景
+   - 输出：Viewport 选择指南、配置示例
+
+3. **ImageLoader 机制**
+   - 任务：研究影像加载流程、缓存机制、元数据提供
+   - 输出：数据流图、加载流程图
+
+4. **工具系统架构**
+   - 任务：研究工具注册、状态管理、事件系统
+   - 输出：工具集成指南、自定义工具开发
+
+5. **MPR 实现技术调研**
+   - 任务：研究如何在 Cornerstone3D 中实现 MPR 功能
+     - 三个正交视图的创建和配置
+     - 定位线的绘制和更新机制
+     - 联动导航的实现方式
+     - 层厚调节的实现方法
+     - 斜位 MPR 的配置
+   - 输出：MPR 技术方案、实现步骤、性能优化建议
+
+6. **性能优化最佳实践**
+   - 任务：研究缓存配置、懒加载、Web Worker 使用
+   - 输出：性能优化清单、基准测试方法
+
+### 输出文件
+
+**Phase 0 输出**: `research.md` - 包含所有技术决策和最佳实践
+
+## Phase 1: 设计与契约
+
+### 数据模型设计
+
+从功能规格中提取核心实体，创建 `data-model.md`：
+
+**核心实体**：
+- ImageId, ImageIds, VolumeId
+- Viewport, RenderingEngine, ImageLoader
+- Tool, Annotation, Measurement
+- **MPR 专用**：MPR Viewport, Reference Line, Crosshair, Slab Thickness, Reconstruction Plane
+
+**关系图**：
+- RenderingEngine → Viewport (1:N)
+- Viewport → Volume/Image (1:1)
+- Tool → Viewport (N:1)
+- MPR Viewport 之间的同步关系
+
+### API 契约
+
+生成 `contracts/` 目录，包含：
+- **core-api.md**: 核心包 API（RenderingEngine, Viewport, Cache）
+- **tools-api.md**: 工具包 API（标注、测量工具）
+- **loader-api.md**: ImageLoader API（影像加载、元数据）
+- **mpr-api.md**: MPR 专用 API（视图创建、同步、定位线）
+
+### 快速入门指南
+
+创建 `quickstart.md`，包含：
+- 5 分钟快速体验
+- 30 分钟基础查看器搭建
+- 2 小时完整功能集成
+
+### Agent 上下文更新
+
+运行：
+```bash
+.specify/scripts/powershell/update-agent-context.ps1 -AgentType claude
+```
+
+更新 `.claude` 或相关 agent 上下文文件，添加新技术栈信息。
+
+## Phase 2: 任务分解
+
+**注意**: 本阶段由 `/speckit.tasks` 命令执行，不在 `/speckit.plan` 中创建。
+
+任务将包括：
+1. 架构文档编写任务
+2. 入门指南编写任务
+3. 高级功能指南编写任务
+4. **MPR 实现指南编写任务**（新增）
+5. 示例代码创建任务
+6. 测试和验证任务
+7. 文档审查和优化任务
+
+## 下一步行动
+
+1. ✅ **完成**: 宪章检查通过
+2. **当前**: 执行 Phase 0 研究任务
+3. **下一步**: 生成 `research.md` 文档
+4. **后续**: Phase 1 设计（数据模型、API 契约、快速入门）
+5. **最后**: Phase 2 任务分解（使用 `/speckit.tasks` 命令）
+
+---
+
+**文档状态**: Draft | **最后更新**: 2026-01-19

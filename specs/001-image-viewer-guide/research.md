@@ -368,6 +368,233 @@ Phase 0 研究已完成，所有技术决策已确定。下一步是 Phase 1：�
 
 ---
 
+---
+
+## 研究主题 11: MPR（多平面重建）实现方案
+
+### 决策
+
+使用 **Cornerstone3D 的 VolumeViewport + 自定义定位线** 实现 MPR 功能，作为高级用例添加到开发指南中。
+
+### 理由
+
+1. **临床需求**: MPR 是放射科诊断的标准工具，允许从三个正交平面观察解剖结构
+2. **技术可行性**: Cornerstone3D 的 VolumeViewport 完全支持 MPR 所需的功能
+3. **教育价值**: MPR 实现展示了 Cornerstone3D 的高级能力，提升指南的完整性
+4. **用户反馈**: 开发者社区对 MPR 实现有强烈需求
+
+### MPR 核心功能分解
+
+| 功能 | 技术方案 | 复杂度 |
+|------|----------|--------|
+| **三个正交视图** | 三个 VolumeViewport，分别设置为 AXIAL、SAGITTAL、CORONAL | 中等 |
+| **定位线绘制** | SVG 叠加层，基于当前相机位置计算交叉线 | 高 |
+| **联动导航** | 事件监听 + 相机同步更新 | 中等 |
+| **层厚调节** | Viewport.setProperties({ slabThickness, slabMode }) | 低 |
+| **斜位 MPR** | 修改相机方向矩阵（gl-matrix） | 高 |
+| **测量工具** | 使用 @cornerstonejs/tools 的测量工具 | 低 |
+
+### 技术决策细节
+
+#### 11.1 Viewport 选择
+
+**决策**: 使用 VolumeViewport（而非 StackViewport）
+
+**理由**:
+- VolumeViewport 原生支持体数据和切面显示
+- 性能更好（共享体数据缓存）
+- 支持动态切面和相机旋转
+- 适合大型 3D 数据集（512x512x300+ 切片）
+
+**代码结构**:
+```typescript
+const viewportInputs = [
+  { viewportId: 'AXIAL', element: axialElement, type: ViewportType.ORTHOGRAPHIC, defaultView: ViewportInputType.AXIAL },
+  { viewportId: 'SAGITTAL', element: sagittalElement, type: ViewportType.ORTHOGRAPHIC, defaultView: ViewportInputType.SAGITTAL },
+  { viewportId: 'CORONAL', element: coronalElement, type: ViewportType.ORTHOGRAPHIC, defaultView: ViewportInputType.CORONAL }
+];
+```
+
+#### 11.2 定位线实现方案
+
+**决策**: 使用 SVG 叠加层绘制定位线
+
+**技术细节**:
+1. **坐标转换流程**:
+   ```
+   世界坐标 → 图像坐标 → 屏幕坐标 → SVG 坐标
+   ```
+
+2. **更新触发时机**:
+   - 监听 `IMAGE_RENDERED` 事件
+   - 监听相机变化事件
+   - 监听切片导航事件
+
+3. **性能优化**:
+   - 使用 `requestAnimationFrame` 批量更新
+   - 缓存坐标转换结果
+   - 仅在必要时重绘 SVG
+
+**实现示例**:
+```typescript
+function updateReferenceLines(activeViewport: IViewport, otherViewports: IViewport[]) {
+  const camera = activeViewport.getCamera();
+  const focalPoint = camera.focalPoint;
+
+  otherViewports.forEach(viewport => {
+    const svgLayer = getSvgLayer(viewport.element);
+    const linePoints = calculateReferenceLinePoints(focalPoint, viewport);
+    drawSvgLines(svgLayer, linePoints);
+  });
+}
+```
+
+#### 11.3 联动导航实现
+
+**决策**: 使用事件驱动的视图同步机制
+
+**工作流程**:
+1. 用户在视口 A 中点击/拖动
+2. 触发 `IMAGE_RENDERED` 事件
+3. 提取视口 A 的相机位置
+4. 计算视口 B 和 C 应该显示的切片
+5. 更新视口 B 和 C 的相机
+6. 触发定位线更新
+
+**代码示例**:
+```typescript
+axialElement.addEventListener(EVENTS.IMAGE_RENDERED, () => {
+  const camera = axialViewport.getCamera();
+  const { focalPoint } = camera;
+
+  // 同步到冠状位和矢状位
+  coronalViewport.setCamera({ focalPoint });
+  sagittalViewport.setCamera({ focalPoint });
+
+  // 更新定位线
+  updateReferenceLines(axialViewport, [coronalViewport, sagittalViewport]);
+});
+```
+
+#### 11.4 层厚调节
+
+**决策**: 使用 VolumeViewport 内置的 Slab Thickness 功能
+
+**支持的投影模式**:
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `SlabMode.MAX` | 最大强度投影（MIP） | 血管成像、CT 血管造影 |
+| `SlabMode.MIN` | 最小强度投影（MinIP） | 气管显示、肺部成像 |
+| `SlabMode.AVERAGE` | 平均投影 | 噪声降低、平滑显示 |
+
+**实现代码**:
+```typescript
+// 设置层厚为 5mm
+viewport.setProperties({
+  slabThickness: 5,
+  slabMode: SlabMode.MAX
+});
+```
+
+#### 11.5 斜位 MPR
+
+**决策**: 使用 gl-matrix 库修改相机方向
+
+**实现步骤**:
+1. 获取当前相机的 viewMatrix
+2. 创建旋转矩阵
+3. 应用旋转到 viewMatrix
+4. 更新相机
+
+**代码示例**:
+```typescript
+import { mat4 } from 'gl-matrix';
+
+function rotateViewport(viewport: IViewport, angle: number, axis: vec3) {
+  const camera = viewport.getCamera();
+  const rotationMatrix = mat4.create();
+  mat4.rotate(rotationMatrix, rotationMatrix, angle, axis);
+
+  mat4.multiply(camera.viewMatrix, rotationMatrix, camera.viewMatrix);
+  viewport.setCamera(camera);
+}
+```
+
+### MPR 性能优化策略
+
+| 优化点 | 方法 | 预期效果 |
+|--------|------|----------|
+| **数据共享** | 三个视口共享同一个 Volume 对象 | 减少内存占用 60%+ |
+| **渲染优化** | 使用 `requestAnimationFrame` 批量更新 | 提升帧率到 60fps |
+| **定位线缓存** | 缓存 SVG 元素，仅更新坐标 | 减少重绘开销 40% |
+| **懒加载** | 按需加载 Volume 切片 | 减少初始加载时间 50% |
+| **Web Worker** | 在 Worker 中进行坐标计算 | 避免阻塞主线程 |
+
+### MPR 边缘情况处理
+
+| 边缘情况 | 处理方案 |
+|----------|----------|
+| **缺失方向元数据** | 假设标准轴向方向，提供警告 |
+| **切片间距不一致** | 使用平均间距或插值处理 |
+| **大数据集（1000+ 切片）** | 使用分块加载和虚拟化 |
+| **超出边界导航** | 限制切片索引范围，提供视觉反馈 |
+| **WebGL 不支持** | 降级到 StackViewport 或显示错误消息 |
+
+### MPR 示例代码结构
+
+```text
+guides/examples/mpr-viewer/
+├── README.md                    # MPR 示例说明
+├── package.json
+├── vite.config.ts
+├── src/
+│   ├── main.tsx
+│   ├── MPRViewer.tsx            # 主组件，管理三个视口
+│   ├── components/
+│   │   ├── AxialViewport.tsx    # 横断位视图组件
+│   │   ├── SagittalViewport.tsx # 矢状位视图组件
+│   │   ├── CoronalViewport.tsx  # 冠状位视图组件
+│   │   └── ReferenceLines.tsx   # 定位线组件
+│   ├── hooks/
+│   │   ├── useMPRSynchronization.ts  # 联动同步 Hook
+│   │   ├── useSlabThickness.ts       # 层厚调节 Hook
+│   │   └── useObliqueRotation.ts     # 斜位旋转 Hook
+│   └── utils/
+│       ├── coordinateTransform.ts    # 坐标转换工具
+│       └── referenceLineCalculation.ts # 定位线计算
+└── public/
+    └── dicom/                    # 示例 DICOM 数据
+```
+
+### MPR 文档章节结构
+
+在 `guides/advanced/mpr-viewer.md` 中包含以下内容：
+
+1. **概述**: MPR 的概念、应用场景、技术要求
+2. **准备工作**: Volume 数据加载、Viewport 配置
+3. **基础实现**: 三个正交视图的创建和显示
+4. **定位线**: 定位线的绘制和更新机制
+5. **联动导航**: 视图间同步的实现方法
+6. **高级功能**:
+   - 层厚调节
+   - 斜位 MPR
+   - 测量工具集成
+   - 窗宽窗位同步
+7. **性能优化**: 针对 MPR 的优化策略
+8. **常见问题**: 边缘情况处理、调试技巧
+
+### 验收标准
+
+MPR 功能应满足以下标准：
+
+1. **性能**: 标准 CT 数据集（512x512x300）保持 60fps
+2. **准确性**: 定位线位置误差 < 2mm
+3. **响应性**: 切片导航响应时间 < 100ms
+4. **兼容性**: 支持主流浏览器的 WebGL 2.0
+5. **完整性**: 包含所有核心功能（三视图、定位线、联动、测量）
+
+---
+
 ## 参考资源
 
 - **Cornerstone3D 官方文档**: https://www.cornerstonejs.org/
@@ -377,3 +604,5 @@ Phase 0 研究已完成，所有技术决策已确定。下一步是 Phase 1：�
 - **TypeScript 文档**: https://www.typescriptlang.org/docs/
 - **Vite 文档**: https://vitejs.dev/
 - **医学影像开源项目**: OHIF Viewer, MedDream
+- **gl-matrix 文档**: https://glmatrix.net/docs/
+- **医学影像 MPR 论文**: Multi-Planar Reconstruction in Medical Imaging
