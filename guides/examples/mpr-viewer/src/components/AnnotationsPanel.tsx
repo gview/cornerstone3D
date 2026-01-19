@@ -244,9 +244,13 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         else if (handles.start) {
           targetPoint = handles.start;
         }
+        // 对于 ROI 工具（矩形、椭圆等），使用第一点
+        else if (handles.points && Array.isArray(handles.points) && handles.points.length > 0) {
+          targetPoint = handles.points[0];
+        }
       }
 
-      if (!targetPoint) {
+      if (!targetPoint || typeof targetPoint.x !== 'number' || isNaN(targetPoint.x)) {
         console.warn('⚠️ 无法获取测量的空间坐标');
         return;
       }
@@ -267,7 +271,11 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
       const coronalCamera = coronalViewport.getCamera();
 
       // 更新 focalPoint 到测量的位置
-      const newFocalPoint = [targetPoint.x, targetPoint.y, targetPoint.z] as Types.Point3;
+      const newFocalPoint: Types.Point3 = [
+        targetPoint.x,
+        targetPoint.y,
+        targetPoint.z
+      ];
 
       // 保持相机位置的其他参数，只更新 focalPoint
       axialCamera.focalPoint = newFocalPoint;
@@ -281,7 +289,10 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
 
       renderingEngine.renderViewports(viewportIds);
 
-      console.log(`✅ 已跳转到测量位置: [${targetPoint.x.toFixed(2)}, ${targetPoint.y.toFixed(2)}, ${targetPoint.z.toFixed(2)}]`);
+      const xStr = (targetPoint.x ?? 0).toFixed(2);
+      const yStr = (targetPoint.y ?? 0).toFixed(2);
+      const zStr = (targetPoint.z ?? 0).toFixed(2);
+      console.log(`✅ 已跳转到测量位置: [${xStr}, ${yStr}, ${zStr}]`);
     } catch (error) {
       console.error('❌ 跳转到测量位置失败:', error);
     }
