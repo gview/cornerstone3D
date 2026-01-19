@@ -1,5 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Enums } from '@cornerstonejs/core';
+import { useState, useCallback } from 'react';
 import type { RenderingEngine } from '@cornerstonejs/core/types';
 
 /**
@@ -18,6 +17,22 @@ export function useSlabThickness(options: UseSlabThicknessOptions) {
 
   const [slabThickness, setSlabThicknessState] = useState(1);
   const [slabMode, setSlabModeState] = useState<SlabMode>('max');
+
+  /**
+   * 转换投影模式字符串为 Cornerstone3D 枚举值
+   */
+  const convertSlabMode = (mode: SlabMode): string => {
+    switch (mode) {
+      case 'max':
+        return 'max';
+      case 'min':
+        return 'min';
+      case 'avg':
+        return 'avg';
+      default:
+        return 'max';
+    }
+  };
 
   /**
    * 设置层厚
@@ -74,28 +89,12 @@ export function useSlabThickness(options: UseSlabThicknessOptions) {
   );
 
   /**
-   * 转换投影模式字符串为 Cornerstone3D 枚举值
-   */
-  const convertSlabMode = (mode: SlabMode): Enums.SlabMode => {
-    switch (mode) {
-      case 'max':
-        return Enums.SlabMode.MAX;
-      case 'min':
-        return Enums.SlabMode.MIN;
-      case 'avg':
-        return Enums.SlabMode.AVERAGE;
-      default:
-        return Enums.SlabMode.MAX;
-    }
-  };
-
-  /**
    * 重置层厚设置
    */
   const reset = useCallback(() => {
     setSlabThickness(1);
     setSlabMode('max');
-  }, []);
+  }, [setSlabThickness, setSlabMode]);
 
   return {
     slabThickness,

@@ -8,7 +8,10 @@
 ✅ **定位线显示**: 实时显示当前切片在其他视图中的位置
 ✅ **层厚调节**: 支持 MIP、MinIP、Average 等投影模式
 ✅ **斜位 MPR**: 支持任意角度旋转重建
-✅ **测量工具**: 长度、角度、ROI 标注
+✅ **测量工具**: 长度、角度、双向、ROI 标注（矩形、椭圆、圆形等）
+✅ **测量面板**: 实时显示所有测量，支持显示/隐藏、删除单个或批量操作
+✅ **工具模式**: 支持激活、被动、启用、禁用四种工具模式
+✅ **比例尺**: 可显示/隐藏，支持四个方位切换
 ✅ **性能优化**: 共享 Volume 数据，60fps 流畅渲染
 
 ## 技术栈
@@ -27,7 +30,8 @@ src/
 │   ├── AxialViewport.tsx        # 横断位视图
 │   ├── SagittalViewport.tsx     # 矢状位视图
 │   ├── CoronalViewport.tsx      # 冠状位视图
-│   └── ReferenceLines.tsx       # 定位线组件
+│   ├── ReferenceLines.tsx       # 定位线组件
+│   └── AnnotationsPanel.tsx     # 测量面板组件
 ├── hooks/                # 自定义 Hooks
 │   ├── useMPRSynchronization.ts # 联动同步 Hook
 │   ├── useSlabThickness.ts      # 层厚调节 Hook
@@ -168,6 +172,55 @@ function rotateViewport(
 }
 ```
 
+### 测量面板
+
+使用 `AnnotationsPanel` 组件实时显示和管理所有测量：
+
+```typescript
+import AnnotationsPanel from './components/AnnotationsPanel';
+
+<AnnotationsPanel
+  renderingEngine={renderingEngine}
+  viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+/>
+```
+
+**功能特性**：
+- 实时显示所有测量（长度、角度、ROI 等）
+- 单个测量的显示/隐藏切换
+- 批量显示/隐藏所有测量
+- 删除单个或所有测量
+- 过滤非测量工具（Crosshairs、ScaleOverlay）
+- 使用 `eventTarget` 监听标注变化事件（ANNOTATION_ADDED/REMOVED/MODIFIED）
+
+### 工具模式切换
+
+支持四种工具模式：
+
+```typescript
+import { ToolModes } from '@cornerstonejs/tools';
+
+// Active - 可绘制新标注
+toolGroup.setToolActive('Length', {
+  bindings: [{ mouseButton: MouseBindings.Primary }]
+});
+
+// Passive - 可交互但不可绘制
+toolGroup.setToolPassive('Length');
+
+// Enabled - 仅显示，不可交互
+toolGroup.setToolEnabled('Length');
+
+// Disabled - 隐藏标注
+toolGroup.setToolDisabled('Length');
+```
+
+**模式说明**：
+- **激活 (Active)**: 可以绘制新测量，已有测量可交互
+- **被动 (Passive)**: 不能绘制新测量，已有测量可交互
+- **启用 (Enabled)**: 已有测量仅显示，不可交互
+- **禁用 (Disabled)**: 隐藏所有测量
+
 ## 性能优化
 
 ### 1. 数据共享
@@ -248,6 +301,44 @@ npm run lint
 
 ## 故障排查
 
+### 测量面板不显示新测量
+
+**问题**: 绘制新测量后，测量面板没有实时更新
+
+**解决方案**: 确保使用 `eventTarget` 而不是 `document` 来监听事件：
+
+```typescript
+// ❌ 错误：使用 document
+document.addEventListener(Enums.Events.ANNOTATION_ADDED, handler);
+
+// ✅ 正确：使用 eventTarget
+import { eventTarget } from '@cornerstonejs/core';
+eventTarget.addEventListener(Enums.Events.ANNOTATION_ADDED, handler);
+```
+
+### 测量面板显示过多项
+
+**问题**: Crosshairs 和 ScaleOverlay 也显示在测量面板中
+
+**解决方案**: 过滤非测量工具：
+
+```typescript
+const measurementAnnotations = allAnnotations.filter(
+  (ann) =>
+    ann.metadata.toolName !== 'Crosshairs' &&
+    ann.metadata.toolName !== 'ScaleOverlay'
+);
+```
+
+### 工具模式切换不生效
+
+**问题**: 切换工具模式后，测量仍然可以交互
+
+**检查**:
+1. 确认工具组正确配置：`toolGroup.setToolActive(toolName, options)`
+2. 检查是否有多个工具组冲突
+3. 确认视图已添加到工具组：`toolGroup.addViewport(viewportId, renderingEngineId)`
+
 ### 定位线不显示
 
 检查：
@@ -268,6 +359,7 @@ npm run lint
 1. 确保 Volume 数据共享
 2. 使用 `requestAnimationFrame` 批量更新
 3. 启用流式加载减少初始加载时间
+4. 使用 `useCallback` 优化事件处理器，避免不必要的重新渲染
 
 ## 贡献
 

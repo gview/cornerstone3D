@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import { RenderingEngine, Enums, getEnabledElement } from '@cornerstonejs/core';
+import { RenderingEngine, Enums } from '@cornerstonejs/core';
 import type { IViewport } from '@cornerstonejs/core/types';
 
 /**
@@ -17,57 +17,8 @@ export function useMPRSynchronization(options: UseMPRSynchronizationOptions) {
   const eventListeners = useRef<Array<{ element: any; handler: any }>>([]);
 
   /**
-   * 设置联动导航
-   * 监听每个视口的相机变化事件，同步到其他视口
-   */
-  const setupLinkedNavigation = useCallback(() => {
-    const renderingEngine = getEnabledElement(renderingEngineId) as RenderingEngine;
-    if (!renderingEngine) {
-      console.error('Rendering engine not found');
-      return;
-    }
-
-    viewportIds.forEach((viewportId) => {
-      const enabledElement = getEnabledElement(viewportId);
-      if (!enabledElement) return;
-
-      const { viewport } = enabledElement;
-
-      // 监听相机变化事件
-      const cameraModifiedHandler = () => {
-        const camera = (viewport as IViewport).getCamera();
-        const currentFocalPoint = camera.focalPoint;
-        const previousFocalPoint = previousFocalPoints.current[viewportId];
-
-        // 检查焦点位置是否实际改变
-        if (
-          !previousFocalPoint ||
-          previousFocalPoint.x !== currentFocalPoint.x ||
-          previousFocalPoint.y !== currentFocalPoint.y ||
-          previousFocalPoint.z !== currentFocalPoint.z
-        ) {
-          // 同步到其他视口
-          syncToOtherViewports(renderingEngine, viewportId, currentFocalPoint);
-
-          // 更新定位线（定位线组件会监听相机变化事件）
-          updateReferenceLines(viewportId);
-
-          // 保存当前焦点位置
-          previousFocalPoints.current[viewportId] = { ...currentFocalPoint };
-        }
-      };
-
-      // 添加事件监听器
-      enabledElement.addEventListener(Enums.Events.CAMERA_MODIFIED, cameraModifiedHandler);
-      eventListeners.current.push({
-        element: enabledElement,
-        handler: cameraModifiedHandler,
-      });
-    });
-  }, [viewportIds, renderingEngineId]);
-
-  /**
    * 同步到其他视口
+   * 使用 suppressEvents 防止触发 CAMERA_MODIFIED 事件,避免无限循环
    */
   const syncToOtherViewports = useCallback(
     (renderingEngine: RenderingEngine, sourceViewportId: string, focalPoint: any) => {
@@ -77,7 +28,8 @@ export function useMPRSynchronization(options: UseMPRSynchronizationOptions) {
         if ((viewport as any).id !== sourceViewportId) {
           const camera = (viewport as IViewport).getCamera();
           camera.focalPoint = focalPoint;
-          (viewport as IViewport).setCamera(camera);
+          // 使用 suppressEvents 选项防止触发事件,避免无限循环
+          (viewport as IViewport).setCamera(camera, { suppressEvents: true });
           viewport.render();
         }
       });
@@ -96,6 +48,70 @@ export function useMPRSynchronization(options: UseMPRSynchronizationOptions) {
     });
     window.dispatchEvent(event);
   }, []);
+
+  /**
+   * 设置联动导航
+   * 监听每个视口的相机变化事件，同步到其他视口
+   */
+  const setupLinkedNavigation = useCallback((renderingEngine?: RenderingEngine) => {
+    // 如果没有传入 renderingEngine，尝试获取它
+    let engine = renderingEngine;
+
+    // 等待一小段时间确保视口已完全初始化
+    setTimeout(() => {
+      if (!engine) {
+        console.warn('⚠️ RenderingEngine 未传入，跳过联动导航设置');
+        return;
+      }
+
+      viewportIds.forEach((viewportId) => {
+        try {
+          const viewport = engine.getViewport(viewportId);
+          if (!viewport) {
+            console.warn(`⚠️ 无法获取视口: ${viewportId}`);
+            return;
+          }
+
+          // 监听相机变化事件
+          const cameraModifiedHandler = () => {
+            const camera = (viewport as IViewport).getCamera();
+            const currentFocalPoint = camera.focalPoint;
+            const previousFocalPoint = previousFocalPoints.current[viewportId];
+
+            // 检查焦点位置是否实际改变
+            if (
+              !previousFocalPoint ||
+              previousFocalPoint.x !== currentFocalPoint.x ||
+              previousFocalPoint.y !== currentFocalPoint.y ||
+              previousFocalPoint.z !== currentFocalPoint.z
+            ) {
+              // 同步到其他视口
+              syncToOtherViewports(engine, viewportId, currentFocalPoint);
+
+              // 更新定位线（定位线组件会监听相机变化事件）
+              updateReferenceLines(viewportId);
+
+              // 保存当前焦点位置
+              previousFocalPoints.current[viewportId] = { ...currentFocalPoint };
+            }
+          };
+
+          // 添加事件监听器到视口元素
+          const element = (viewport as any).element;
+          if (element) {
+            element.addEventListener(Enums.Events.CAMERA_MODIFIED, cameraModifiedHandler);
+            eventListeners.current.push({
+              element,
+              handler: cameraModifiedHandler,
+            });
+            console.log(`✅ 已为视口 ${viewportId} 设置联动导航`);
+          }
+        } catch (error) {
+          console.error(`❌ 设置视口 ${viewportId} 联动导航失败:`, error);
+        }
+      });
+    }, 100);
+  }, [viewportIds, renderingEngineId, syncToOtherViewports, updateReferenceLines]);
 
   /**
    * 清理事件监听器

@@ -150,41 +150,47 @@
 
 ### Implementation for User Story 4
 
-- [ ] T070 [P] [US4] 创建 MPR 概述文档在 guides/advanced/mpr-viewer.md
-- [ ] T071 [US4] 在 mpr-viewer.md 中添加 MPR 概念和应用场景说明
-- [ ] T072 [US4] 在 mpr-viewer.md 中添加准备工作章节（Volume 数据加载、Viewport 配置）
-- [ ] T073 [US4] 在 mpr-viewer.md 中添加三个正交视图的创建步骤
-- [ ] T074 [US4] 在 mpr-viewer.md 中添加定位线的绘制和更新机制说明
-- [ ] T075 [US4] 在 mpr-viewer.md 中添加联动导航的实现方法
-- [ ] T076 [P] [US4] 在 mpr-viewer.md 中添加层厚调节功能说明
-- [ ] T077 [P] [US4] 在 mpr-viewer.md 中添加斜位 MPR 实现说明
-- [ ] T078 [P] [US4] 在 mpr-viewer.md 中添加测量工具集成说明
-- [ ] T079 [P] [US4] 在 mpr-viewer.md 中添加性能优化策略章节
-- [ ] T080 [P] [US4] 在 mpr-viewer.md 中添加边缘情况处理和常见问题
-- [ ] T081 [US4] 创建 MPR 术语表在 guides/architecture/glossary.md（添加 MPR 相关术语）
-- [ ] T082 [P] [US4] 更新 multi-viewport.md，添加 MPR 相关内容链接
+- [x] T070 [P] [US4] 创建 MPR 概述文档在 guides/advanced/mpr-viewer.md
+- [x] T071 [US4] 在 mpr-viewer.md 中添加 MPR 概念和应用场景说明
+- [x] T072 [US4] 在 mpr-viewer.md 中添加准备工作章节（Volume 数据加载、Viewport 配置）
+- [x] T073 [US4] 在 mpr-viewer.md 中添加三个正交视图的创建步骤
+- [x] T074 [US4] 在 mpr-viewer.md 中添加定位线的绘制和更新机制说明
+- [x] T075 [US4] 在 mpr-viewer.md 中添加联动导航的实现方法
+- [x] T076 [P] [US4] 在 mpr-viewer.md 中添加层厚调节功能说明
+- [x] T077 [P] [US4] 在 mpr-viewer.md 中添加斜位 MPR 实现说明
+- [x] T078 [P] [US4] 在 mpr-viewer.md 中添加测量工具集成说明
+- [x] T079 [P] [US4] 在 mpr-viewer.md 中添加性能优化策略章节
+- [x] T080 [P] [US4] 在 mpr-viewer.md 中添加边缘情况处理和常见问题
+- [x] T081 [US4] 创建 MPR 术语表在 guides/architecture/glossary.md（添加 MPR 相关术语）
+- [x] T082 [P] [US4] 更新 multi-viewport.md，添加 MPR 相关内容链接
 
 ### Example Project for User Story 4
 
-- [ ] T083 [US4] 创建 MPR 查看器示例项目在 guides/examples/mpr-viewer/
-- [ ] T084 [P] [US4] 创建 mpr-viewer 的 README.md（包含 MPR 功能说明和运行步骤）
-- [ ] T085 [P] [US4] 创建 mpr-viewer 的 package.json
-- [ ] T086 [P] [US4] 创建 mpr-viewer 的 vite.config.ts
-- [ ] T087 [P] [US4] 创建 mpr-viewer 的 tsconfig.json
-- [ ] T088 [P] [US4] 创建 mpr-viewer 的 index.html（包含三个视口的容器）
-- [ ] T089 [P] [US4] 创建 mpr-viewer 的 src/main.tsx
-- [ ] T090 [US4] 创建 mpr-viewer 的 src/MPRViewer.tsx（主组件，管理三个视口）
-- [ ] T091 [P] [US4] 创建 mpr-viewer 的 src/components/AxialViewport.tsx
-- [ ] T092 [P] [US4] 创建 mpr-viewer 的 src/components/SagittalViewport.tsx
-- [ ] T093 [P] [US4] 创建 mpr-viewer 的 src/components/CoronalViewport.tsx
-- [ ] T094 [P] [US4] 创建 mpr-viewer 的 src/components/ReferenceLines.tsx（定位线组件）
-- [ ] T095 [P] [US4] 创建 mpr-viewer 的 src/hooks/useMPRSynchronization.ts（联动同步 Hook）
-- [ ] T096 [P] [US4] 创建 mpr-viewer 的 src/hooks/useSlabThickness.ts（层厚调节 Hook）
-- [ ] T097 [P] [US4] 创建 mpr-viewer 的 src/hooks/useObliqueRotation.ts（斜位旋转 Hook）
-- [ ] T098 [P] [US4] 创建 mpr-viewer 的 src/utils/coordinateTransform.ts（坐标转换工具）
-- [ ] T099 [P] [US4] 创建 mpr-viewer 的 src/utils/referenceLineCalculation.ts（定位线计算）
-- [ ] T100 [P] [US4] 创建 mpr-viewer 的 src/cornerstone/init.ts（MPR 初始化逻辑）
-- [ ] T101 [P] [US4] 创建 mpr-viewer 的 src/types/index.d.ts
+- [x] T083 [US4] 创建 MPR 查看器示例项目在 guides/examples/mpr-viewer/
+- [x] T084 [P] [US4] 创建 mpr-viewer 的 README.md（包含 MPR 功能说明和运行步骤）
+- [x] T085 [P] [US4] 创建 mpr-viewer 的 package.json
+- [x] T086 [P] [US4] 创建 mpr-viewer 的 vite.config.ts
+- [x] T087 [P] [US4] 创建 mpr-viewer 的 tsconfig.json
+- [x] T088 [P] [US4] 创建 mpr-viewer 的 index.html（包含三个视口的容器）
+- [x] T089 [P] [US4] 创建 mpr-viewer 的 src/main.tsx
+- [x] T090 [US4] 创建 mpr-viewer 的 src/MPRViewer.tsx（主组件，管理三个视口）
+- [x] T091 [P] [US4] 创建 mpr-viewer 的 src/components/AxialViewport.tsx
+- [x] T092 [P] [US4] 创建 mpr-viewer 的 src/components/SagittalViewport.tsx
+- [x] T093 [P] [US4] 创建 mpr-viewer 的 src/components/CoronalViewport.tsx
+- [x] T094 [P] [US4] 创建 mpr-viewer 的 src/components/ReferenceLines.tsx（定位线组件）
+- [x] T102 [P] [US4] 创建 mpr-viewer 的 src/components/AnnotationsPanel.tsx（测量面板组件）
+- [x] T095 [P] [US4] 创建 mpr-viewer 的 src/hooks/useMPRSynchronization.ts（联动同步 Hook）
+- [x] T096 [P] [US4] 创建 mpr-viewer 的 src/hooks/useSlabThickness.ts（层厚调节 Hook）
+- [x] T097 [P] [US4] 创建 mpr-viewer 的 src/hooks/useObliqueRotation.ts（斜位旋转 Hook）
+- [x] T098 [P] [US4] 创建 mpr-viewer 的 src/utils/coordinateTransform.ts（坐标转换工具）
+- [x] T099 [P] [US4] 创建 mpr-viewer 的 src/utils/referenceLineCalculation.ts（定位线计算）
+- [x] T100 [P] [US4] 创建 mpr-viewer 的 src/cornerstone/init.ts（MPR 初始化逻辑）
+- [x] T101 [P] [US4] 创建 mpr-viewer 的 src/types/index.d.ts
+- [x] T103 [US4] 在 mpr-viewer 中实现工具模式切换功能（Active/Passive/Enabled/Disabled）
+- [x] T104 [US4] 在 mpr-viewer 中添加测量工具集成（长度、角度、双向、ROI）
+- [x] T105 [US4] 实现测量面板的事件驱动更新（使用 eventTarget 而非 document）
+- [x] T106 [US4] 在 mpr-viewer 中添加比例尺显示/隐藏功能
+- [x] T107 [US4] 更新 README.md，添加测量面板和工具模式文档
 
 **Checkpoint**: MPR 指南和示例完成，开发者可以实现完整的 MPR 查看器
 
