@@ -145,6 +145,29 @@ code {
   padding: 2px;
 }
 
+/* 主内容区域：包含视口和面板 */
+.mpr-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 面板浮动模式时的布局 */
+.mpr-content.panel-floating {
+  position: relative;
+}
+
+/* 面板嵌入模式时的布局 */
+.mpr-content.panel-docked {
+  flex-direction: row;
+}
+
+.mpr-content.panel-docked .mpr-viewports {
+  flex: 1;
+  min-width: 0;
+}
+
 .viewport-container {
   position: relative;
   background-color: #000;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { annotation, Enums } from '@cornerstonejs/tools';
 import { eventTarget } from '@cornerstonejs/core';
 import type { Types } from '@cornerstonejs/core';
@@ -28,14 +28,89 @@ interface Annotation {
 interface AnnotationsPanelProps {
   renderingEngine: Types.IRenderingEngine | null;
   viewportIds: string[];
+  onPositionChange?: (isDocked: boolean) => void;
 }
 
 const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   renderingEngine,
   viewportIds,
+  onPositionChange,
 }) => {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [position, setPosition] = useState({ x: 20, y: 20 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isDocked, setIsDocked] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // 检测是否应该切换到嵌入模式
+  useEffect(() => {
+    const dockThreshold = 50; // 距离左边50px时自动嵌入
+
+    if (position.x <= dockThreshold && !isDocked) {
+      setIsDocked(true);
+      onPositionChange?.(true);
+    } else if (position.x > dockThreshold && isDocked) {
+      setIsDocked(false);
+      onPositionChange?.(false);
+    }
+  }, [position.x, isDocked, onPositionChange]);
+
+  // 处理拖拽开始
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 只响应左键
+    if (e.button !== 0) return;
+
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+    setIsDragging(true);
+
+    // 如果当前是嵌入模式，拖拽时切换到浮动模式
+    if (isDocked) {
+      setIsDocked(false);
+      onPositionChange?.(false);
+    }
+  };
+
+  // 处理拖拽移动
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+
+      // 限制在窗口范围内
+      const maxX = window.innerWidth - 300;
+      const maxY = window.innerHeight - 100;
+
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, dragOffset]);
 
   // 刷新标注列表
   const refreshAnnotations = useCallback(() => {
@@ -218,7 +293,8 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   // 获取标注的可见性状态
   const getAnnotationVisibility = (annotationUID: string): boolean => {
     try {
-      return visibility.isAnnotationVisible(annotationUID);
+      const isVisible = visibility.isAnnotationVisible(annotationUID);
+      return isVisible ?? true;
     } catch {
       return true;
     }
@@ -236,17 +312,45 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
       if (annotation.data.handles) {
         const { handles } = annotation.data;
 
-        // 对于点工具（如探针）
-        if (handles.points && handles.points.length > 0) {
-          targetPoint = handles.points[0];
-        }
-        // 对于线段工具（如长度、角度）
-        else if (handles.start) {
+        // 调试：输出工具类型和 handles 结构
+        console.log('🔍 测量工具:', annotation.metadata.toolName);
+        console.log('🔍 Handles 结构:', JSON.stringify(handles, null, 2));
+
+        // 对于线段工具（如长度、角度）- 使用 start 点
+        if (handles.start && typeof handles.start.x === 'number') {
           targetPoint = handles.start;
         }
-        // 对于 ROI 工具（矩形、椭圆等），使用第一点
+        // 对于点数组和 ROI 工具
         else if (handles.points && Array.isArray(handles.points) && handles.points.length > 0) {
-          targetPoint = handles.points[0];
+          const firstPoint = handles.points[0];
+
+          // 检查是对象格式 {x, y, z} 还是数组格式 [x, y, z]
+          if (firstPoint && typeof firstPoint === 'object') {
+            if (typeof firstPoint.x === 'number') {
+              // 对象格式 - 点工具（如探针）
+              targetPoint = firstPoint;
+            } else if (Array.isArray(firstPoint) && firstPoint.length >= 3) {
+              // 数组格式 - ROI 工具（矩形、椭圆）
+              // 计算所有顶点的中心点
+              let sumX = 0, sumY = 0, sumZ = 0;
+              handles.points.forEach((point: any) => {
+                if (Array.isArray(point) && point.length >= 3) {
+                  sumX += point[0];
+                  sumY += point[1];
+                  sumZ += point[2];
+                }
+              });
+
+              const count = handles.points.length;
+              targetPoint = {
+                x: sumX / count,
+                y: sumY / count,
+                z: sumZ / count
+              };
+
+              console.log(`✅ ROI 中心点: [${targetPoint.x.toFixed(2)}, ${targetPoint.y.toFixed(2)}, ${targetPoint.z.toFixed(2)}]`);
+            }
+          }
         }
       }
 
@@ -270,17 +374,37 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
       const sagittalCamera = sagittalViewport.getCamera();
       const coronalCamera = coronalViewport.getCamera();
 
-      // 更新 focalPoint 到测量的位置
-      const newFocalPoint: Types.Point3 = [
-        targetPoint.x,
-        targetPoint.y,
-        targetPoint.z
-      ];
+      // 检查相机对象的有效性
+      if (!axialCamera.position || !axialCamera.focalPoint ||
+          !sagittalCamera.position || !sagittalCamera.focalPoint ||
+          !coronalCamera.position || !coronalCamera.focalPoint) {
+        console.warn('⚠️ 相机数据无效');
+        return;
+      }
 
-      // 保持相机位置的其他参数，只更新 focalPoint
-      axialCamera.focalPoint = newFocalPoint;
-      sagittalCamera.focalPoint = newFocalPoint;
-      coronalCamera.focalPoint = newFocalPoint;
+      // 只更新每个视口对应轴的 focalPoint，保持相机位置不变
+      // 这样可以保持缩放和平移，只改变切片位置
+
+      // Axial 视口（横断位）：只更新 z 轴（切片层）
+      axialCamera.focalPoint = [
+        axialCamera.focalPoint[0],
+        axialCamera.focalPoint[1],
+        targetPoint.z
+      ] as Types.Point3;
+
+      // Sagittal 视口（矢状位）：只更新 x 轴（切片层）
+      sagittalCamera.focalPoint = [
+        targetPoint.x,
+        sagittalCamera.focalPoint[1],
+        sagittalCamera.focalPoint[2]
+      ] as Types.Point3;
+
+      // Coronal 视口（冠状位）：只更新 y 轴（切片层）
+      coronalCamera.focalPoint = [
+        coronalCamera.focalPoint[0],
+        targetPoint.y,
+        coronalCamera.focalPoint[2]
+      ] as Types.Point3;
 
       // 应用相机并重新渲染
       axialViewport.setCamera(axialCamera);
@@ -299,8 +423,20 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   };
 
   return (
-    <div className="annotations-panel">
-      <div className="panel-header">
+    <div
+      ref={panelRef}
+      className={`annotations-panel ${isDocked ? 'docked' : 'floating'}`}
+      style={!isDocked ? {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        cursor: isDragging ? 'grabbing' : 'default'
+      } : undefined}
+    >
+      <div
+        className="panel-header"
+        onMouseDown={handleMouseDown}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      >
         <h3>测量面板</h3>
         <div className="header-actions">
           <button
@@ -408,19 +544,25 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
 
       <style>{`
         .annotations-panel {
-          position: fixed;
-          top: 200px;
-          right: 20px;
           width: 300px;
-          max-height: calc(100vh - 220px);
+          max-height: calc(100vh - 40px);
           background: #2a2a2a;
           border: 1px solid #444;
           border-radius: 8px;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-          z-index: 1000;
           overflow: hidden;
           display: flex;
           flex-direction: column;
+        }
+
+        .annotations-panel.floating {
+          position: fixed;
+          z-index: 1000;
+        }
+
+        .annotations-panel.docked {
+          position: relative;
+          z-index: 1;
         }
 
         .panel-header {
@@ -430,6 +572,7 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
           padding: 12px 16px;
           background: #333;
           border-bottom: 1px solid #444;
+          user-select: none;
         }
 
         .panel-header h3 {
@@ -437,6 +580,7 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
           font-size: 16px;
           color: #fff;
           font-weight: 600;
+          pointer-events: none;
         }
 
         .header-actions {

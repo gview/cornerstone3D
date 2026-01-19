@@ -48,6 +48,7 @@ function MPRViewer() {
   const [showScale, setShowScale] = useState<boolean>(true);
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const [showCrosshairs, setShowCrosshairs] = useState<boolean>(true);
+  const [isPanelDocked, setIsPanelDocked] = useState<boolean>(false);
 
   // 工具模式状态：记录每个工具的当前模式
   const [toolModes, setToolModes] = useState<Record<string, string>>({
@@ -673,6 +674,12 @@ function MPRViewer() {
     console.log(`✅ ${toolName} 工具模式已设置为: ${newMode}`);
   };
 
+  // 处理测量面板停靠状态变化
+  const handlePanelPositionChange = (docked: boolean) => {
+    setIsPanelDocked(docked);
+    console.log(`✅ 测量面板${docked ? '已嵌入' : '已浮动'}`);
+  };
+
   if (!isInitialized) {
     return (
       <div className="loading-overlay">
@@ -887,37 +894,47 @@ function MPRViewer() {
         )}
       </div>
 
-      {/* 三个视口 */}
-      <div ref={viewportsGridRef} className="mpr-viewports">
-        <div className="viewport-container">
-          <div className="viewport-label">横断位 (Axial)</div>
-          <div
-            ref={axialRef}
-            className="viewport-element"
-            id="axialViewport"
-          />
+      {/* 主内容区域：包含视口和测量面板 */}
+      <div className={`mpr-content ${isPanelDocked ? 'panel-docked' : 'panel-floating'}`}>
+        {/* 三个视口 */}
+        <div ref={viewportsGridRef} className="mpr-viewports">
+          <div className="viewport-container">
+            <div className="viewport-label">横断位 (Axial)</div>
+            <div
+              ref={axialRef}
+              className="viewport-element"
+              id="axialViewport"
+            />
+          </div>
+
+          <div className="viewport-container">
+            <div className="viewport-label">矢状位 (Sagittal)</div>
+            <div
+              ref={sagittalRef}
+              className="viewport-element"
+              id="sagittalViewport"
+            />
+          </div>
+
+          <div className="viewport-container">
+            <div className="viewport-label">冠状位 (Coronal)</div>
+            <div
+              ref={coronalRef}
+              className="viewport-element"
+              id="coronalViewport"
+            />
+          </div>
         </div>
 
-        <div className="viewport-container">
-          <div className="viewport-label">矢状位 (Sagittal)</div>
-          <div
-            ref={sagittalRef}
-            className="viewport-element"
-            id="sagittalViewport"
-          />
-        </div>
-
-        <div className="viewport-container">
-          <div className="viewport-label">冠状位 (Coronal)</div>
-          <div
-            ref={coronalRef}
-            className="viewport-element"
-            id="coronalViewport"
-          />
-        </div>
+        {/* 测量面板 */}
+        <AnnotationsPanel
+          renderingEngine={renderingEngine}
+          viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+          onPositionChange={handlePanelPositionChange}
+        />
       </div>
 
-      {/* 控制面板 */}
+      {/* 控制面板 - 始终在底部 */}
       <div className="control-panel">
         <div className="control-group">
           <label>层厚 (mm):</label>
@@ -951,12 +968,6 @@ function MPRViewer() {
           </div>
         )}
       </div>
-
-      {/* 测量面板 */}
-      <AnnotationsPanel
-        renderingEngine={renderingEngine}
-        viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
-      />
     </div>
   );
 }
