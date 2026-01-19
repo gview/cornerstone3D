@@ -114,35 +114,83 @@
 
 ### Implementation for User Story 3
 
-- [ ] T040 [P] [US3] 创建标注工具指南在 guides/advanced/annotations.md
-- [ ] T041 [P] [US3] 创建测量工具指南在 guides/advanced/measurements.md
-- [ ] T042 [P] [US3] 创建 3D 体渲染指南在 guides/advanced/volume-rendering.md
-- [ ] T043 [P] [US3] 创建多视口同步指南在 guides/advanced/multi-viewport.md
-- [ ] T044 [US3] 创建性能优化指南在 guides/advanced/performance-optimization.md
-- [ ] T045 [P] [US3] 创建 AI 集成指南在 guides/advanced/ai-integration.md
-- [ ] T046 [P] [US3] 创建自定义工具指南在 guides/advanced/custom-tools.md
-- [ ] T047 [P] [US3] 创建高级加载器指南在 guides/advanced/advanced-loaders.md
+- [x] T040 [P] [US3] 创建标注工具指南在 guides/advanced/annotations.md
+- [x] T041 [P] [US3] 创建测量工具指南在 guides/advanced/measurements.md
+- [x] T042 [P] [US3] 创建 3D 体渲染指南在 guides/advanced/volume-rendering.md
+- [x] T043 [P] [US3] 创建多视口同步指南在 guides/advanced/multi-viewport.md
+- [x] T044 [US3] 创建性能优化指南在 guides/advanced/performance-optimization.md
+- [x] T045 [P] [US3] 创建 AI 集成指南在 guides/advanced/ai-integration.md
+- [x] T046 [P] [US3] 创建自定义工具指南在 guides/advanced/custom-tools.md
+- [x] T047 [P] [US3] 创建高级加载器指南在 guides/advanced/advanced-loaders.md
 
 ### Example Project for User Story 3
 
-- [ ] T048 [US3] 创建高级查看器示例项目在 guides/examples/advanced-viewer/
-- [ ] T049 [P] [US3] 创建 advanced-viewer 的 README.md
-- [ ] T050 [P] [US3] 创建 advanced-viewer 的 package.json
-- [ ] T051 [P] [US3] 创建 advanced-viewer 的 vite.config.ts
-- [ ] T052 [P] [US3] 创建 advanced-viewer 的 tsconfig.json
-- [ ] T053 [P] [US3] 创建 advanced-viewer 的 index.html
-- [ ] T054 [P] [US3] 创建 advanced-viewer 的 src/main.tsx
-- [ ] T055 [P] [US3] 创建 advanced-viewer 的 src/App.tsx
-- [ ] T056 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/init.ts
-- [ ] T057 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/viewport.ts
-- [ ] T058 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/tools.ts
-- [ ] T059 [P] [US3] 创建 advanced-viewer 的 src/types/index.d.ts
+- [x] T048 [US3] 创建高级查看器示例项目在 guides/examples/advanced-viewer/
+- [x] T049 [P] [US3] 创建 advanced-viewer 的 README.md
+- [x] T050 [P] [US3] 创建 advanced-viewer 的 package.json
+- [x] T051 [P] [US3] 创建 advanced-viewer 的 vite.config.ts
+- [x] T052 [P] [US3] 创建 advanced-viewer 的 tsconfig.json
+- [x] T053 [P] [US3] 创建 advanced-viewer 的 index.html
+- [x] T054 [P] [US3] 创建 advanced-viewer 的 src/main.tsx
+- [x] T055 [P] [US3] 创建 advanced-viewer 的 src/App.tsx
+- [x] T056 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/init.ts
+- [x] T057 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/viewport.ts
+- [x] T058 [P] [US3] 创建 advanced-viewer 的 src/cornerstone/tools.ts
+- [x] T059 [P] [US3] 创建 advanced-viewer 的 src/types/index.d.ts
 
 **Checkpoint**: 高级功能指南和示例完成，开发者可以集成高级功能
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: User Story 4 - MPR 多平面重建实现（高级用例） (Priority: P3)
+
+**Goal**: 提供完整的 MPR（Multi-Planar Reconstruction）实现指南，帮助开发者创建横断位、冠状位、矢状位三视图联动的查看器
+
+**Independent Test**: 开发者按照指南能够实现一个完整的 MPR 查看器，包含三视图联动、定位线、可调节层厚、旋转和测量功能，并能正确加载和显示 CT/MRI 3D 数据集
+
+### Implementation for User Story 4
+
+- [ ] T070 [P] [US4] 创建 MPR 概述文档在 guides/advanced/mpr-viewer.md
+- [ ] T071 [US4] 在 mpr-viewer.md 中添加 MPR 概念和应用场景说明
+- [ ] T072 [US4] 在 mpr-viewer.md 中添加准备工作章节（Volume 数据加载、Viewport 配置）
+- [ ] T073 [US4] 在 mpr-viewer.md 中添加三个正交视图的创建步骤
+- [ ] T074 [US4] 在 mpr-viewer.md 中添加定位线的绘制和更新机制说明
+- [ ] T075 [US4] 在 mpr-viewer.md 中添加联动导航的实现方法
+- [ ] T076 [P] [US4] 在 mpr-viewer.md 中添加层厚调节功能说明
+- [ ] T077 [P] [US4] 在 mpr-viewer.md 中添加斜位 MPR 实现说明
+- [ ] T078 [P] [US4] 在 mpr-viewer.md 中添加测量工具集成说明
+- [ ] T079 [P] [US4] 在 mpr-viewer.md 中添加性能优化策略章节
+- [ ] T080 [P] [US4] 在 mpr-viewer.md 中添加边缘情况处理和常见问题
+- [ ] T081 [US4] 创建 MPR 术语表在 guides/architecture/glossary.md（添加 MPR 相关术语）
+- [ ] T082 [P] [US4] 更新 multi-viewport.md，添加 MPR 相关内容链接
+
+### Example Project for User Story 4
+
+- [ ] T083 [US4] 创建 MPR 查看器示例项目在 guides/examples/mpr-viewer/
+- [ ] T084 [P] [US4] 创建 mpr-viewer 的 README.md（包含 MPR 功能说明和运行步骤）
+- [ ] T085 [P] [US4] 创建 mpr-viewer 的 package.json
+- [ ] T086 [P] [US4] 创建 mpr-viewer 的 vite.config.ts
+- [ ] T087 [P] [US4] 创建 mpr-viewer 的 tsconfig.json
+- [ ] T088 [P] [US4] 创建 mpr-viewer 的 index.html（包含三个视口的容器）
+- [ ] T089 [P] [US4] 创建 mpr-viewer 的 src/main.tsx
+- [ ] T090 [US4] 创建 mpr-viewer 的 src/MPRViewer.tsx（主组件，管理三个视口）
+- [ ] T091 [P] [US4] 创建 mpr-viewer 的 src/components/AxialViewport.tsx
+- [ ] T092 [P] [US4] 创建 mpr-viewer 的 src/components/SagittalViewport.tsx
+- [ ] T093 [P] [US4] 创建 mpr-viewer 的 src/components/CoronalViewport.tsx
+- [ ] T094 [P] [US4] 创建 mpr-viewer 的 src/components/ReferenceLines.tsx（定位线组件）
+- [ ] T095 [P] [US4] 创建 mpr-viewer 的 src/hooks/useMPRSynchronization.ts（联动同步 Hook）
+- [ ] T096 [P] [US4] 创建 mpr-viewer 的 src/hooks/useSlabThickness.ts（层厚调节 Hook）
+- [ ] T097 [P] [US4] 创建 mpr-viewer 的 src/hooks/useObliqueRotation.ts（斜位旋转 Hook）
+- [ ] T098 [P] [US4] 创建 mpr-viewer 的 src/utils/coordinateTransform.ts（坐标转换工具）
+- [ ] T099 [P] [US4] 创建 mpr-viewer 的 src/utils/referenceLineCalculation.ts（定位线计算）
+- [ ] T100 [P] [US4] 创建 mpr-viewer 的 src/cornerstone/init.ts（MPR 初始化逻辑）
+- [ ] T101 [P] [US4] 创建 mpr-viewer 的 src/types/index.d.ts
+
+**Checkpoint**: MPR 指南和示例完成，开发者可以实现完整的 MPR 查看器
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
 
 **Purpose**: 故障排查、文档完善和质量保证
 
@@ -177,6 +225,7 @@
 - **User Story 1 (P1)**: 可在 Foundational 完成后开始 - 无其他故事依赖
 - **User Story 2 (P2)**: 可在 Foundational 完成后开始 - 建议先完成 US1（架构理解有助于编写指南）
 - **User Story 3 (P3)**: 可在 Foundational 完成后开始 - 依赖 US2（基础功能是高级功能的前提）
+- **User Story 4 (P3 - MPR)**: 可在 Foundational 完成后开始 - 依赖 US2 和 US3（需要基础查看器和高级功能知识）
 
 ### Within Each User Story
 
@@ -274,8 +323,9 @@ With multiple writers:
 | Phase 3 | User Story 1 - 架构理解 | 7 | 4 parallel (T016-T020) |
 | Phase 4 | User Story 2 - 基础查看器 | 17 | 8 parallel (T023-T024, T027, T030-T039) |
 | Phase 5 | User Story 3 - 高级功能 | 20 | 10 parallel (T040-T047, T049-T058) |
-| Phase 6 | Polish | 11 | 8 parallel (T060-T068) |
-| **Total** | | **70** | **38 parallel opportunities** |
+| Phase 6 | User Story 4 - MPR 实现 | 32 | 18 parallel (T070, T076-T082, T084-T101) |
+| Phase 7 | Polish | 11 | 8 parallel (T060-T068) |
+| **Total** | | **102** | **56 parallel opportunities** |
 
 ---
 
@@ -288,9 +338,10 @@ With multiple writers:
 | Phase 3: User Story 1 | 8-12 hours | Phase 2 |
 | Phase 4: User Story 2 | 12-16 hours | Phase 2 + US1 (recommended) |
 | Phase 5: User Story 3 | 16-20 hours | Phase 2 + US2 (required) |
-| Phase 6: Polish | 4-6 hours | All desired stories |
-| **Total (Serial)** | **43-59 hours** | |
-| **Total (Parallel, 3 writers)** | **15-25 hours** | |
+| Phase 6: User Story 4 (MPR) | 20-24 hours | Phase 2 + US2 + US3 (required) |
+| Phase 7: Polish | 4-6 hours | All desired stories |
+| **Total (Serial)** | **63-83 hours** | |
+| **Total (Parallel, 3 writers)** | **22-32 hours** | |
 
 ---
 
