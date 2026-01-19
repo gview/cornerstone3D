@@ -10,10 +10,17 @@ interface Annotation {
   metadata: {
     toolName: string;
     label?: string;
+    referencedImageId?: string;
     [key: string]: any;
   };
   data: {
     label?: string;
+    handles?: {
+      points?: Array<{ x: number; y: number; z: number }>;
+      start?: { x: number; y: number; z: number };
+      end?: { x: number; y: number; z: number };
+      [key: string]: any;
+    };
     [key: string]: any;
   };
 }
@@ -217,6 +224,69 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
     }
   };
 
+  // 跳转到测量的位置
+  const jumpToAnnotation = (annotation: Annotation) => {
+    try {
+      if (!renderingEngine) return;
+
+      // 从测量数据中获取空间坐标
+      let targetPoint: { x: number; y: number; z: number } | undefined;
+
+      // 尝试从 handles 中获取坐标
+      if (annotation.data.handles) {
+        const { handles } = annotation.data;
+
+        // 对于点工具（如探针）
+        if (handles.points && handles.points.length > 0) {
+          targetPoint = handles.points[0];
+        }
+        // 对于线段工具（如长度、角度）
+        else if (handles.start) {
+          targetPoint = handles.start;
+        }
+      }
+
+      if (!targetPoint) {
+        console.warn('⚠️ 无法获取测量的空间坐标');
+        return;
+      }
+
+      // 获取三个视口的相机
+      const axialViewport = renderingEngine.getViewport(viewportIds[0]) as Types.IVolumeViewport;
+      const sagittalViewport = renderingEngine.getViewport(viewportIds[1]) as Types.IVolumeViewport;
+      const coronalViewport = renderingEngine.getViewport(viewportIds[2]) as Types.IVolumeViewport;
+
+      if (!axialViewport || !sagittalViewport || !coronalViewport) {
+        console.warn('⚠️ 无法获取视口');
+        return;
+      }
+
+      // 获取当前相机
+      const axialCamera = axialViewport.getCamera();
+      const sagittalCamera = sagittalViewport.getCamera();
+      const coronalCamera = coronalViewport.getCamera();
+
+      // 更新 focalPoint 到测量的位置
+      const newFocalPoint = [targetPoint.x, targetPoint.y, targetPoint.z] as Types.Point3;
+
+      // 保持相机位置的其他参数，只更新 focalPoint
+      axialCamera.focalPoint = newFocalPoint;
+      sagittalCamera.focalPoint = newFocalPoint;
+      coronalCamera.focalPoint = newFocalPoint;
+
+      // 应用相机并重新渲染
+      axialViewport.setCamera(axialCamera);
+      sagittalViewport.setCamera(sagittalCamera);
+      coronalViewport.setCamera(coronalCamera);
+
+      renderingEngine.renderViewports(viewportIds);
+
+      console.log(`✅ 已跳转到测量位置: [${targetPoint.x.toFixed(2)}, ${targetPoint.y.toFixed(2)}, ${targetPoint.z.toFixed(2)}]`);
+    } catch (error) {
+      console.error('❌ 跳转到测量位置失败:', error);
+    }
+  };
+
   return (
     <div className="annotations-panel">
       <div className="panel-header">
@@ -267,6 +337,9 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
                   <div
                     key={annotation.annotationUID}
                     className={`annotation-item ${isVisible ? 'visible' : 'hidden'}`}
+                    onClick={() => jumpToAnnotation(annotation)}
+                    style={{ cursor: 'pointer' }}
+                    title="点击跳转到此测量位置"
                   >
                     <div className="annotation-info">
                       <span className="annotation-icon">
@@ -281,19 +354,33 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
                     </div>
                     <div className="annotation-actions">
                       <button
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          jumpToAnnotation(annotation);
+                        }}
+                        className="jump-button"
+                        title="跳转到此测量"
+                      >
+                        🎯
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           toggleAnnotationVisibility(
                             annotation.annotationUID,
                             !isVisible
-                          )
-                        }
+                          );
+                        }}
                         className="visibility-toggle"
                         title={isVisible ? '隐藏' : '显示'}
                       >
                         {isVisible ? '👁️' : '👁️‍🗨️'}
                       </button>
                       <button
-                        onClick={() => deleteAnnotation(annotation.annotationUID)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteAnnotation(annotation.annotationUID);
+                        }}
                         className="delete-button"
                         title="删除此测量"
                       >
@@ -441,6 +528,22 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
           flex-shrink: 0;
           display: flex;
           gap: 6px;
+        }
+
+        .jump-button {
+          padding: 6px 10px;
+          font-size: 14px;
+          background: #28a745;
+          border: 1px solid #218838;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+          color: #fff;
+        }
+
+        .jump-button:hover {
+          background: #218838;
+          border-color: #1e7e34;
         }
 
         .visibility-toggle {
