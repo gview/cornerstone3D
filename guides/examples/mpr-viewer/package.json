@@ -1,0 +1,46 @@
+{
+  "name": "mpr-viewer-example",
+  "version": "1.0.0",
+  "description": "Cornerstone3D MPR Viewer 示例项目 - 完整的多平面重建查看器",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "@cornerstonejs/core": "^1.0.0",
+    "@cornerstonejs/tools": "^1.0.0",
+    "@cornerstonejs/dicom-image-loader": "^1.0.0",
+    "gl-matrix": "^3.4.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  },
+  "keywords": [
+    "cornerstone3d",
+    "medical-imaging",
+    "mpr",
+    "multi-planar-reconstruction",
+    "dicom",
+    "react",
+    "typescript"
+  ],
+  "author": "Cornerstone3D Contributors",
+  "license": "MIT"
+}

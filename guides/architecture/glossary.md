@@ -252,6 +252,106 @@ const imageId = 'file:/path/to/file.dcm';
 
 ## M
 
+### MIP (Maximum Intensity Projection)
+
+**中文**: 最大强度投影
+
+**定义**: 一种层厚投影模式，显示投影层内像素的最大值。
+
+**应用场景**:
+- CT 血管造影
+- 显示高密度结构（如骨骼、血管）
+- 增强血管的可视化效果
+
+**代码示例**:
+
+```typescript
+import { SlabMode } from '@cornerstone3D/core';
+
+viewport.setProperties({
+  slabThickness: 5,
+  slabMode: SlabMode.MAX,
+});
+```
+
+**相关文档**: [MPR 查看器 - 层厚调节](../advanced/mpr-viewer.md#1-层厚slab-thickness-调节)
+
+---
+
+### MinIP (Minimum Intensity Projection)
+
+**中文**: 最小强度投影
+
+**定义**: 一种层厚投影模式，显示投影层内像素的最小值。
+
+**应用场景**:
+- 肺部成像（显示气管）
+- 显示低密度结构
+- 气体空腔可视化
+
+**代码示例**:
+
+```typescript
+import { SlabMode } from '@cornerstone3D/core';
+
+viewport.setProperties({
+  slabThickness: 5,
+  slabMode: SlabMode.MIN,
+});
+```
+
+**相关文档**: [MPR 查看器 - 层厚调节](../advanced/mpr-viewer.md#1-层厚slab-thickness-调节)
+
+---
+
+### MPR (Multi-Planar Reconstruction)
+
+**中文**: 多平面重建
+
+**定义**: 从 3D 体数据（CT 或 MRI）中生成多个正交 2D 切面的医学影像显示技术。
+
+**核心特性**:
+- 三个正交视图：横断位（Axial）、冠状位（Coronal）、矢状位（Sagittal）
+- 视图间联动导航
+- 定位线显示
+- 层厚调节
+- 斜位重建
+
+**应用场景**:
+- 多角度观察解剖结构
+- 手术规划和路径设计
+- 病灶的精确定位
+- 结构跟踪（血管、神经、气管）
+
+**代码示例**:
+
+```typescript
+const viewportInputs = [
+  {
+    viewportId: 'AXIAL',
+    element: document.getElementById('axialViewport'),
+    type: ViewportType.ORTHOGRAPHIC,
+    defaultView: ViewportInputType.AXIAL,
+  },
+  {
+    viewportId: 'SAGITTAL',
+    element: document.getElementById('sagittalViewport'),
+    type: ViewportType.ORTHOGRAPHIC,
+    defaultView: ViewportInputType.SAGITTAL,
+  },
+  {
+    viewportId: 'CORONAL',
+    element: document.getElementById('coronalViewport'),
+    type: ViewportType.ORTHOGRAPHIC,
+    defaultView: ViewportInputType.CORONAL,
+  },
+];
+```
+
+**相关文档**: [MPR 查看器实现指南](../advanced/mpr-viewer.md)
+
+---
+
 ### Metadata
 
 **中文**: 元数据
@@ -302,6 +402,46 @@ const metadata = {
 
 ## R
 
+### Reference Line (定位线)
+
+**中文**: 定位线 / 参考线
+
+**定义**: MPR 视图中显示的线条，指示当前活动视图在其他视图中的位置。
+
+**作用**:
+- 显示当前切片在其他视图中的投影位置
+- 帮助理解 3D 空间关系
+- 实现视图间的空间定位
+- 支持联动导航的视觉反馈
+
+**实现方式**:
+- 使用 SVG 叠加层在视口上绘制
+- 通过坐标转换计算线条位置
+- 实时更新以响应视图变化
+
+**代码示例**:
+
+```typescript
+function calculateReferenceLines(
+  activeViewport: IViewport,
+  targetViewport: IViewport
+): { x1, y1, x2, y2 }[] {
+  const camera = activeViewport.getCamera();
+  const focalPoint = camera.focalPoint;
+
+  // 将世界坐标转换为目标视图的图像坐标
+  // 返回线条坐标
+  return [
+    { x1: 0, y1: focalPoint.y, x2: canvas.width, y2: focalPoint.y },
+    { x1: focalPoint.x, y1: 0, x2: focalPoint.x, y2: canvas.height },
+  ];
+}
+```
+
+**相关文档**: [MPR 查看器 - 定位线](../advanced/mpr-viewer.md#定位线绘制和更新机制)
+
+---
+
 ### ROI (Region of Interest)
 
 **中文**: 感兴趣区
@@ -319,6 +459,40 @@ const metadata = {
 ---
 
 ## S
+
+### Slab Thickness (层厚)
+
+**中文**: 层厚 / 投影厚度
+
+**定义**: MPR 视图中显示的切片厚度，可以投影多个相邻切片以改善可视化效果。
+
+**投影模式**:
+- **单切片 (Slab Mode = 1)** - 显示单个切片，高清晰度
+- **最大强度投影 (MIP)** - 显示该层内最大像素值，适用于血管成像
+- **最小强度投影 (MinIP)** - 显示该层内最小像素值，适用于气管显示
+- **平均投影 (Average)** - 显示该层内像素平均值，用于噪声降低
+
+**应用场景**:
+- 血管可视化（使用 MIP）
+- 肺部和气管成像（使用 MinIP）
+- 噪声降低（使用 Average）
+- 厚切片 MPR 用于快速导航
+
+**代码示例**:
+
+```typescript
+import { SlabMode } from '@cornerstone3D/core';
+
+// 设置 5mm 最大强度投影
+viewport.setProperties({
+  slabThickness: 5,
+  slabMode: SlabMode.MAX,
+});
+```
+
+**相关文档**: [MPR 查看器 - 层厚调节](../advanced/mpr-viewer.md#1-层厚slab-thickness-调节)
+
+---
 
 ### Stack
 
