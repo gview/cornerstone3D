@@ -229,6 +229,37 @@ guides/
 
 **Phase 0 输出**: `research.md` - 包含所有技术决策和最佳实践
 
+### 关键技术决策
+
+#### MPR 实现技术栈
+- **视图创建**: 使用 `ViewportType.ORTHOGRAPHIC` 和 `ViewportInputType` (AXIAL/SAGITTAL/CORONAL)
+- **数据共享**: 三个视口共享同一个 Volume 对象，通过 `volumeId` 引用
+- **定位线渲染**: 使用 SVG 叠加层实时绘制，坐标转换使用 `camera.position` 和 `focalPoint`
+- **联动同步**: 监听 `EVENTS.CAMERA_MODIFIED` 事件，更新其他视图的相机位置
+- **层厚调节**: 使用 `viewport.setProperties({ slabThickness, slabMode })`
+
+#### 测量面板实现（新增）
+- **组件架构**: `AnnotationsPanel` React 组件，接收 `renderingEngine` 和 `viewportIds` props
+- **事件监听**: 使用 `eventTarget.addEventListener` 监听 `ANNOTATION_ADDED/REMOVED/MODIFIED` 事件
+  - ⚠️ 关键：必须使用 `eventTarget` 而不是 `document`
+- **状态管理**: 使用 React `useState` 存储测量列表，`useCallback` 优化函数引用
+- **过滤逻辑**: 排除 `Crosshairs` 和 `ScaleOverlay` 工具，只显示真正的测量工具
+- **可见性控制**: 使用 `annotation.visibility.setAnnotationVisibility()`
+- **删除功能**: 使用 `annotation.state.removeAnnotation()`
+
+#### 工具模式实现（新增）
+- **模式类型**: `ToolModes.Active` | `ToolModes.Passive` | `ToolModes.Enabled` | `ToolModes.Disabled`
+- **状态管理**: 使用 React `useState` 维护每个工具的当前模式
+- **单一 Active 约束**: 切换到 Active 模式时，将其他 Active 工具设为 Passive，保留其他状态
+- **动态切换**: 使用 `toolGroup[\`setTool${mode}\`]` 动态调用方法
+- **UI 反馈**: 下拉选择器显示当前工具模式，工具栏显示激活状态
+
+#### 比例尺集成（新增）
+- **工具**: `ScaleOverlayTool` 提供比例尺显示
+- **位置控制**: `viewport.setProperties({ scaleLocation: 'top' | 'bottom' | 'left' | 'right' })`
+- **显示控制**: 通过 `ToolGroupManager` 的工具模式控制（Enabled/Disabled）
+- **全局同步**: 比例尺设置应用到所有三个视口
+
 ## Phase 1: 设计与契约
 
 ### 数据模型设计
@@ -254,6 +285,8 @@ guides/
 - **tools-api.md**: 工具包 API（标注、测量工具）
 - **loader-api.md**: ImageLoader API（影像加载、元数据）
 - **mpr-api.md**: MPR 专用 API（视图创建、同步、定位线）
+- **measurement-panel-api.md**: 测量面板 API（AnnotationsPanel、事件监听、状态管理）
+- **tool-modes-api.md**: 工具模式 API（Active/Passive/Enabled/Disabled、ToolGroup）
 
 ### 快速入门指南
 
@@ -280,9 +313,10 @@ guides/
 2. 入门指南编写任务
 3. 高级功能指南编写任务
 4. **MPR 实现指南编写任务**（新增）
-5. 示例代码创建任务
-6. 测试和验证任务
-7. 文档审查和优化任务
+5. **测量面板和工具模式实现任务**（新增）
+6. 示例代码创建任务
+7. 测试和验证任务
+8. 文档审查和优化任务
 
 ## 下一步行动
 
