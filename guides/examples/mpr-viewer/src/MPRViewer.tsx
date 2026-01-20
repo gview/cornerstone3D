@@ -27,6 +27,7 @@ import { initCornerstone } from './cornerstone/init';
 import AnnotationsPanel from './components/AnnotationsPanel';
 import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
 import Toolbar from './components/Toolbar';
+import ViewportOverlay from './components/ViewportOverlay';
 import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
 import type { IVolume } from '@cornerstonejs/core/types';
 
@@ -57,6 +58,13 @@ function MPRViewer() {
   const [isSeriesPanelCollapsed, setIsSeriesPanelCollapsed] = useState<boolean>(false);
   const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
   const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
+
+  // 当前图像索引状态（用于每个视口）
+  const [currentImageIndices, setCurrentImageIndices] = useState<Record<string, number>>({
+    AXIAL: 0,
+    SAGITTAL: 0,
+    CORONAL: 0,
+  });
 
   // 工具模式状态：记录每个工具的当前模式
   const [toolModes, setToolModes] = useState<Record<string, string>>({
@@ -975,6 +983,15 @@ function MPRViewer() {
                 className="viewport-element"
                 id="axialViewport"
               />
+              <ViewportOverlay
+                viewportId="AXIAL"
+                viewportLabel="Axial"
+                imageIds={imageIds}
+                currentImageIndex={currentImageIndices.AXIAL}
+                seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
+                modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
+                patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
+              />
             </div>
 
             <div className="viewport-container">
@@ -984,6 +1001,15 @@ function MPRViewer() {
                 className="viewport-element"
                 id="sagittalViewport"
               />
+              <ViewportOverlay
+                viewportId="SAGITTAL"
+                viewportLabel="Sagittal"
+                imageIds={imageIds}
+                currentImageIndex={currentImageIndices.SAGITTAL}
+                seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
+                modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
+                patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
+              />
             </div>
 
             <div className="viewport-container">
@@ -992,6 +1018,15 @@ function MPRViewer() {
                 ref={coronalRef}
                 className="viewport-element"
                 id="coronalViewport"
+              />
+              <ViewportOverlay
+                viewportId="CORONAL"
+                viewportLabel="Coronal"
+                imageIds={imageIds}
+                currentImageIndex={currentImageIndices.CORONAL}
+                seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
+                modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
+                patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
               />
             </div>
           </div>
