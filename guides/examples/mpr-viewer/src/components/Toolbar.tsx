@@ -76,7 +76,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="toolbar-group">
         <label className="toolbar-label">文件</label>
         <button onClick={onLoadFiles} className="primary-button">
-          📁 加载 DICOM
+          <span className="icon">📁</span>
+          <span className="text">加载 DICOM</span>
         </button>
         {imageCount > 0 && (
           <span className="info-text">{imageCount} 张</span>
@@ -87,7 +88,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
             className={showSeriesPanel ? 'active-button' : ''}
             title={showSeriesPanel ? '隐藏序列面板' : '显示序列面板'}
           >
-            📚 序列
+            <span className="icon">📚</span>
+            <span className="text">序列</span>
           </button>
         )}
         {hasVolume && (
@@ -96,7 +98,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
             className={showAnnotationsPanel ? 'active-button' : ''}
             title={showAnnotationsPanel ? '隐藏测量面板' : '显示测量面板'}
           >
-            📏 测量
+            <span className="icon">📏</span>
+            <span className="text">测量</span>
           </button>
         )}
       </div>
@@ -150,7 +153,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           className={activeTool === 'Bidirectional' ? 'active-button' : ''}
           title="双向测量"
         >
-          📏
+          ✛
         </button>
         <button
           onClick={() => onToolChange('Probe')}
@@ -290,9 +293,14 @@ const Toolbar: React.FC<ToolbarProps> = ({
         .toolbar-group {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           padding-right: 16px;
           border-right: 1px solid #3e3e42;
+        }
+
+        /* 为带文字的按钮组添加额外间距 */
+        .toolbar-group:has(button .text) {
+          gap: 8px;
         }
 
         .toolbar-group:last-child {
@@ -309,7 +317,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         .toolbar button {
           min-width: 32px;
           height: 28px;
-          padding: 4px 8px;
+          padding: 4px 10px;
           background: #3c3c3c;
           border: 1px solid #3e3e42;
           border-radius: 4px;
@@ -317,9 +325,22 @@ const Toolbar: React.FC<ToolbarProps> = ({
           font-size: 13px;
           cursor: pointer;
           transition: all 0.15s ease;
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
+          gap: 4px;
+          white-space: nowrap;
+        }
+
+        .toolbar button .icon {
+          font-size: 14px;
+          line-height: 1;
+          flex-shrink: 0;
+        }
+
+        .toolbar button .text {
+          font-size: 12px;
+          line-height: 1;
         }
 
         .toolbar button:hover:not(:disabled) {

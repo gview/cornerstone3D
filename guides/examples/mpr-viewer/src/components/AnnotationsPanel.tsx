@@ -415,28 +415,30 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         {!isCollapsed && <h3>测量面板</h3>}
         <div className="header-actions">
           {!isCollapsed && (
-            <button
-              onClick={showAllAnnotations}
-              className="icon-button"
-              title="显示所有标注"
-            >
-              👁️
-            </button>
+            <>
+              <button
+                onClick={showAllAnnotations}
+                className="icon-button"
+                title="显示所有标注"
+              >
+                👁️
+              </button>
+              <button
+                onClick={hideAllAnnotations}
+                className="icon-button"
+                title="隐藏所有标注"
+              >
+                👁️‍🗨️
+              </button>
+            </>
           )}
-          <button
-            onClick={hideAllAnnotations}
-            className="icon-button"
-            title="隐藏所有标注"
-          >
-            👁️‍🗨️
-          </button>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
               className="icon-button"
               title={isCollapsed ? '展开面板' : '收缩面板'}
             >
-              {isCollapsed ? '◀' : '▶'}
+              {isCollapsed ? (panelPosition === 'left' ? '▶' : '◀') : (panelPosition === 'left' ? '◀' : '▶')}
             </button>
           )}
           {onClose && !isCollapsed && (
