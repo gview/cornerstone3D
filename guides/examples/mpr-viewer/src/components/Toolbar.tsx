@@ -1,12 +1,17 @@
 import React from 'react';
 import { IconButton, DropdownButton } from './common';
-import { ToolsPanel, ViewControlPanel } from './panels';
+import { ToolsPanel, ViewControlPanel, EnhancedLayoutPanel } from './panels';
+import type { ViewportLayout } from './panels';
 import './common/IconButton.css';
 import './common/DropdownButton.css';
 
 export interface ToolbarProps {
   // 文件操作
   onLoadFiles: () => void;
+
+  // 布局切换
+  currentLayout: ViewportLayout;
+  onLayoutChange: (layout: ViewportLayout) => void;
 
   // 工具选择
   activeTool: string;
@@ -48,6 +53,8 @@ export interface ToolbarProps {
 
 const Toolbar: React.FC<ToolbarProps> = ({
   onLoadFiles,
+  currentLayout,
+  onLayoutChange,
   activeTool,
   toolModes,
   onToolChange,
@@ -104,12 +111,20 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
   // 下拉面板状态
   const [toolsPanelOpen, setToolsPanelOpen] = React.useState(false);
+  const [layoutPanelOpen, setLayoutPanelOpen] = React.useState(false);
 
   // 包装工具切换函数，选中后关闭面板
   const handleToolChange = (toolName: string) => {
     onToolChange(toolName);
     setToolsPanelOpen(false);
   };
+
+  // 处理布局切换
+  const handleLayoutChange = (layout: ViewportLayout) => {
+    onLayoutChange(layout);
+    setLayoutPanelOpen(false);
+  };
+
   return (
     <div className="toolbar-compact">
       {/* 文件操作组 */}
@@ -137,6 +152,25 @@ const Toolbar: React.FC<ToolbarProps> = ({
             active={showAnnotationsPanel}
           />
         )}
+      </div>
+
+      {/* 布局切换组 */}
+      <div className="toolbar-group">
+        <DropdownButton
+          icon="▦"
+          tooltip="切换视口布局"
+          disabled={!hasVolume}
+          isOpen={layoutPanelOpen}
+          onOpen={() => setLayoutPanelOpen(true)}
+          onClose={() => setLayoutPanelOpen(false)}
+        >
+          <EnhancedLayoutPanel
+            isOpen={layoutPanelOpen}
+            onClose={() => setLayoutPanelOpen(false)}
+            currentLayout={currentLayout}
+            onLayoutChange={handleLayoutChange}
+          />
+        </DropdownButton>
       </div>
 
       {/* 工具选择组 */}

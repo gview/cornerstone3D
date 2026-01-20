@@ -15,6 +15,7 @@
 ✅ **序列管理**: 支持多序列加载，序列缩略图展示，双击切换序列
 ✅ **工具模式**: 支持激活、被动、启用、禁用四种工具模式
 ✅ **比例尺**: 可显示/隐藏，支持四个方位切换
+✅ **布局面板**: 🆕 支持网格布局和协议布局切换（9种网格 + 8种协议布局）
 ✅ **性能优化**: 共享 Volume 数据，使用 Cornerstone3D 事件系统，零延迟更新，60fps 流畅渲染
 
 ## 技术栈
@@ -30,18 +31,29 @@
 ```text
 src/
 ├── components/           # React 组件
+│   ├── panels/                  # 面板组件
+│   │   ├── EnhancedLayoutPanel.tsx  # 🆕 增强型布局面板
+│   │   ├── ToolsPanel.tsx          # 工具面板
+│   │   └── ViewControlPanel.tsx    # 视图控制面板
+│   ├── common/                 # 通用组件
+│   │   ├── IconButton.tsx          # 图标按钮
+│   │   └── DropdownButton.tsx      # 下拉按钮
 │   ├── AxialViewport.tsx        # 横断位视图
 │   ├── SagittalViewport.tsx     # 矢状位视图
 │   ├── CoronalViewport.tsx      # 冠状位视图
 │   ├── ReferenceLines.tsx       # 定位线组件
-│   └── AnnotationsPanel.tsx     # 测量面板组件
+│   ├── AnnotationsPanel.tsx     # 测量面板组件
+│   ├── SeriesPanel.tsx          # 序列面板组件
+│   ├── ViewportOverlay.tsx      # 视口覆盖层（四角信息）
+│   └── Toolbar.tsx              # 工具栏组件
 ├── hooks/                # 自定义 Hooks
 │   ├── useMPRSynchronization.ts # 联动同步 Hook
 │   ├── useSlabThickness.ts      # 层厚调节 Hook
 │   └── useObliqueRotation.ts    # 斜位旋转 Hook
 ├── utils/                # 工具函数
 │   ├── coordinateTransform.ts   # 坐标转换
-│   └── referenceLineCalculation.ts # 定位线计算
+│   ├── referenceLineCalculation.ts # 定位线计算
+│   └── thumbnailGenerator.ts    # 缩略图生成
 ├── cornerstone/          # Cornerstone3D 配置
 │   └── init.ts                  # 初始化逻辑
 ├── types/                # TypeScript 类型定义
@@ -49,6 +61,37 @@ src/
 ├── MPRViewer.tsx         # 主组件
 └── main.tsx              # 应用入口
 ```
+
+## 新功能特性 🆕
+
+### 布局面板 (Layout Panel)
+
+支持多种视口布局切换,满足不同场景需求:
+
+#### 网格布局 (9种)
+
+- **1×1**: 单视图模式
+- **1×2 / 2×1**: 双视图（横向/纵向）
+- **2×2**: 标准四视图
+- **3×1 / 1×3**: 三视图（纵向/横向）
+- **3×2 / 2×3**: 六视图
+- **3×3**: 九视图
+
+#### 协议布局 (8种)
+
+- **MPR**: 标准多平面重建（轴向、冠状、矢状）
+- **3D Four Up**: 3D 四视图
+- **3D Main**: 3D 主视图
+- **Axial Primary**: 轴位为主视图
+- **3D Only**: 纯 3D 渲染
+- **3D Primary**: 3D 为主视图
+- **Frame View**: 帧视图
+- **Advanced**: 高级自定义配置
+
+详细文档:
+- [布局面板使用指南](LAYOUT_PANEL_GUIDE.md)
+- [视口布局切换完整指南](VIEWPORT_LAYOUT_SWITCHING.md)
+- [集成文档](LAYOUT_PANEL_INTEGRATION.md)
 
 ## 快速开始
 

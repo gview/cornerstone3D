@@ -31,6 +31,7 @@ import Toolbar from './components/Toolbar';
 import ViewportOverlay from './components/ViewportOverlay';
 import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
 import type { IVolume } from '@cornerstonejs/core/types';
+import type { ViewportLayout } from './components/panels';
 
 const { MouseBindings, ToolModes } = csToolsEnums;
 
@@ -60,6 +61,9 @@ function MPRViewer() {
   const [annotationsPanelPosition, setAnnotationsPanelPosition] = useState<'left' | 'right'>('right');
   const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
   const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
+
+  // 视口布局状态
+  const [currentLayout, setCurrentLayout] = useState<ViewportLayout>('grid-1x3');
 
   // 当前图像索引状态（用于每个视口）
   const [currentImageIndices, setCurrentImageIndices] = useState<Record<string, number>>({
@@ -1064,6 +1068,23 @@ function MPRViewer() {
     console.log(`✅ 测量面板已移动到${position === 'left' ? '左侧' : '右侧'}`);
   };
 
+  // 处理布局切换
+  const handleLayoutChange = (layout: ViewportLayout) => {
+    console.log(`🔄 切换布局到: ${layout}`);
+
+    // 网格布局处理 (暂时只记录日志，实际实现需要更多代码)
+    if (layout.startsWith('grid-')) {
+      const [, rows, cols] = layout.split('-')[1].split('x').map(Number);
+      console.log(`  网格布局: ${rows}行 x ${cols}列`);
+      // TODO: 实现网格布局切换逻辑
+    } else {
+      console.log(`  协议布局: ${layout}`);
+      // TODO: 实现协议布局切换逻辑
+    }
+
+    setCurrentLayout(layout);
+  };
+
   // 计算视口的总切片数 - 现在使用动态计算的总切片数
   // 该函数已被 getImageSliceDataForVolumeViewport 替代
   // 保留此函数作为后备
@@ -1219,6 +1240,8 @@ function MPRViewer() {
       {/* 顶部工具栏 */}
       <Toolbar
         onLoadFiles={() => fileInputRef.current?.click()}
+        currentLayout={currentLayout}
+        onLayoutChange={handleLayoutChange}
         activeTool={activeTool}
         toolModes={toolModes}
         onToolChange={handleToolChange}
