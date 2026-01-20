@@ -197,8 +197,20 @@
 - [x] T111 [US4] 更新 MPRViewer.tsx 布局，支持测量面板嵌入模式
 - [x] T112 [US4] 添加 CSS 样式支持面板浮动/嵌入模式切换
 - [x] T113 [US4] 更新 README.md，添加测量面板拖拽和嵌入功能文档
+- [x] T114 [US4] 实现序列管理功能（SeriesPanel 组件）
+- [x] T115 [US4] 实现序列信息提取和分组（按 Study 分组）
+- [x] T116 [US4] 实现序列缩略图显示（根据模态类型着色）
+- [x] T117 [US4] 实现序列切换功能（双击切换，更新 volume）
+- [x] T118 [US4] 在工具栏添加序列面板按钮和计数显示
+- [x] T119 [US4] 实现视口四角信息显示（ViewportOverlay 组件）
+- [x] T120 [US4] 实现信息叠加层布局（左上：视图名，右上：切片，左下：坐标，右下：窗宽窗位）
+- [x] T121 [US4] 更新 README.md，添加序列面板和视口信息文档
+- [x] T122 [US4] 更新 common-pitfalls.md，添加 MPR 相关常见陷阱
+- [x] T123 [US4] 更新 spec.md，添加新功能需求和实体定义
+- [x] T124 [US4] 更新 plan.md，添加新功能技术实现方案
+- [x] T125 [US4] 更新 tasks.md，标记已完成的任务
 
-**Checkpoint**: MPR 指南和示例完成，开发者可以实现完整的 MPR 查看器
+**Checkpoint**: MPR 指南和示例完成，开发者可以实现完整的 MPR 查看器，包括序列管理、视口信息显示和可拖拽面板
 
 ---
 
@@ -335,9 +347,9 @@ With multiple writers:
 | Phase 3 | User Story 1 - 架构理解 | 7 | 4 parallel (T016-T020) |
 | Phase 4 | User Story 2 - 基础查看器 | 17 | 8 parallel (T023-T024, T027, T030-T039) |
 | Phase 5 | User Story 3 - 高级功能 | 20 | 10 parallel (T040-T047, T049-T058) |
-| Phase 6 | User Story 4 - MPR 实现 | 32 | 18 parallel (T070, T076-T082, T084-T101) |
+| Phase 6 | User Story 4 - MPR 实现 | 45 | 22 parallel (T070, T076-T082, T084-T101, T114-T125) |
 | Phase 7 | Polish | 11 | 8 parallel (T060-T068) |
-| **Total** | | **102** | **56 parallel opportunities** |
+| **Total** | | **115** | **60 parallel opportunities** |
 
 ---
 
@@ -350,10 +362,10 @@ With multiple writers:
 | Phase 3: User Story 1 | 8-12 hours | Phase 2 |
 | Phase 4: User Story 2 | 12-16 hours | Phase 2 + US1 (recommended) |
 | Phase 5: User Story 3 | 16-20 hours | Phase 2 + US2 (required) |
-| Phase 6: User Story 4 (MPR) | 20-24 hours | Phase 2 + US2 + US3 (required) |
+| Phase 6: User Story 4 (MPR + 新功能) | 26-30 hours | Phase 2 + US2 + US3 (required) |
 | Phase 7: Polish | 4-6 hours | All desired stories |
-| **Total (Serial)** | **63-83 hours** | |
-| **Total (Parallel, 3 writers)** | **22-32 hours** | |
+| **Total (Serial)** | **69-89 hours** | |
+| **Total (Parallel, 3 writers)** | **24-34 hours** | |
 
 ---
 
