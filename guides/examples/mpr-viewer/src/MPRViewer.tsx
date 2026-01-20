@@ -1219,7 +1219,6 @@ function MPRViewer() {
       {/* 顶部工具栏 */}
       <Toolbar
         onLoadFiles={() => fileInputRef.current?.click()}
-        imageCount={imageIds.length}
         activeTool={activeTool}
         toolModes={toolModes}
         onToolChange={handleToolChange}

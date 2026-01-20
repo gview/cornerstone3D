@@ -1,0 +1,72 @@
+.icon-button {
+  position: relative;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #3c3c3c;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-button .icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.icon-button .badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #d73a49;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: #4a4a4a;
+  border-color: #007acc;
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-button.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.icon-button.primary {
+  background: #007acc;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.icon-button.primary:hover:not(:disabled) {
+  background: #1e8ad6;
+}
+
+.icon-button.danger {
+  background: #d73a49;
+  border-color: #d73a49;
+  color: #ffffff;
+}
+
+.icon-button.danger:hover:not(:disabled) {
+  background: #b52a2a;
+}
