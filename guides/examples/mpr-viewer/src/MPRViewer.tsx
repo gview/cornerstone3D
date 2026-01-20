@@ -18,7 +18,7 @@ import {
   Enums as csToolsEnums,
 } from '@cornerstonejs/tools';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
-import { state, annotation } from '@cornerstonejs/tools';
+import { annotation } from '@cornerstonejs/tools';
 
 const { selection } = annotation;
 import { useSlabThickness } from './hooks/useSlabThickness';
@@ -26,9 +26,10 @@ import { useObliqueRotation } from './hooks/useObliqueRotation';
 import { initCornerstone } from './cornerstone/init';
 import AnnotationsPanel from './components/AnnotationsPanel';
 import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
+import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
 import type { IVolume } from '@cornerstonejs/core/types';
 
-const { MouseBindings, KeyboardBindings, ToolModes } = csToolsEnums;
+const { MouseBindings, ToolModes } = csToolsEnums;
 
 // MPR 查看器主组件
 function MPRViewer() {
@@ -50,6 +51,7 @@ function MPRViewer() {
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const [showCrosshairs, setShowCrosshairs] = useState<boolean>(true);
   const [isPanelDocked, setIsPanelDocked] = useState<boolean>(false);
+  const [isSeriesPanelDocked, setIsSeriesPanelDocked] = useState<boolean>(false);
   const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
   const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
   const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
@@ -77,6 +79,15 @@ function MPRViewer() {
     viewportIds: ['AXIAL', 'SAGITTAL', 'CORONAL'],
     renderingEngine,
   });
+
+  // 调试：监控序列面板状态变化
+  useEffect(() => {
+    console.log('🔍 序列面板状态更新:', {
+      showSeriesPanel,
+      seriesListLength: seriesList.length,
+      currentSeriesUID
+    });
+  }, [showSeriesPanel, seriesList.length, currentSeriesUID]);
 
   // 初始化 Cornerstone3D
   useEffect(() => {
@@ -194,24 +205,73 @@ function MPRViewer() {
         try {
           const seriesModule = metaData.get('seriesModule', imageId);
           const generalSeriesModule = metaData.get('generalSeriesModule', imageId);
+          const generalStudyModule = metaData.get('generalStudyModule', imageId);
+          const patientModule = metaData.get('patientModule', imageId);
 
-          if (seriesModule && generalSeriesModule) {
-            const seriesInstanceUID = seriesModule.seriesInstanceUID;
+          console.log(`📋 ImageID: ${imageId.slice(0, 20)}...`);
+          console.log('  seriesModule:', seriesModule);
+          console.log('  generalSeriesModule:', generalSeriesModule);
+          console.log('  generalStudyModule:', generalStudyModule);
+          console.log('  patientModule:', patientModule);
+
+          // 尝试多种方式获取序列信息
+          if (generalSeriesModule) {
+            // generalSeriesModule 通常包含大部分序列信息
+            const seriesInstanceUID = generalSeriesModule.seriesInstanceUID ||
+                                     (seriesModule && seriesModule.seriesInstanceUID) ||
+                                     `series-${generalSeriesModule.seriesNumber || 1}-${generalSeriesModule.modality || 'UN'}`;
 
             if (!seriesInfoMap.has(seriesInstanceUID)) {
               seriesInfoMap.set(seriesInstanceUID, {
                 seriesInstanceUID,
                 seriesNumber: generalSeriesModule.seriesNumber || 0,
-                seriesDescription: generalSeriesModule.seriesDescription || '',
+                seriesDescription: generalSeriesModule.seriesDescription || '未命名序列',
                 modality: generalSeriesModule.modality || 'UN',
                 numberOfImages: 1,
                 imageIds: [imageId],
-                StudyInstanceUID: seriesModule.StudyInstanceUID,
+                StudyInstanceUID: seriesModule?.StudyInstanceUID || generalSeriesModule.studyInstanceUID,
+                // 添加检查信息
+                studyDescription: generalStudyModule?.studyDescription,
+                studyDate: generalStudyModule?.studyDate,
+                studyTime: generalStudyModule?.studyTime,
+                // 添加患者信息
+                patientName: patientModule?.patientName?.Alphabetic || patientModule?.patientName,
+                patientId: patientModule?.patientId,
               });
+              console.log(`  ✅ 新序列: ${generalSeriesModule.seriesNumber} - ${generalSeriesModule.seriesDescription}`);
             } else {
               const seriesInfo = seriesInfoMap.get(seriesInstanceUID)!;
               seriesInfo.imageIds.push(imageId);
               seriesInfo.numberOfImages = seriesInfo.imageIds.length;
+            }
+          } else {
+            // 如果标准元数据获取失败，使用一个通用的 fallback 序列
+            console.warn(`⚠️ 标准序列元数据获取失败，使用通用序列`);
+
+            // 使用时间戳创建唯一的 UID，确保每次加载都有新的序列
+            const fallbackSeriesUID = `fallback-series-${Date.now()}`;
+
+            if (!seriesInfoMap.has(fallbackSeriesUID)) {
+              seriesInfoMap.set(fallbackSeriesUID, {
+                seriesInstanceUID: fallbackSeriesUID,
+                seriesNumber: seriesInfoMap.size + 1, // 使用当前序列数量作为序列号
+                seriesDescription: `DICOM Series ${seriesInfoMap.size + 1}`,
+                modality: 'CT',
+                numberOfImages: 1,
+                imageIds: [imageId],
+                // 添加检查和患者信息
+                studyDescription: generalStudyModule?.studyDescription,
+                studyDate: generalStudyModule?.studyDate,
+                studyTime: generalStudyModule?.studyTime,
+                patientName: patientModule?.patientName?.Alphabetic || patientModule?.patientName,
+                patientId: patientModule?.patientId,
+              });
+              console.log(`  ✅ 创建通用序列: ${fallbackSeriesUID}`);
+            } else {
+              const seriesInfo = seriesInfoMap.get(fallbackSeriesUID)!;
+              seriesInfo.imageIds.push(imageId);
+              seriesInfo.numberOfImages = seriesInfo.imageIds.length;
+              console.log(`  ➕ 添加到通用序列 (${seriesInfo.numberOfImages} 张图像)`);
             }
           }
         } catch (error) {
@@ -219,20 +279,56 @@ function MPRViewer() {
         }
       }
 
-      // 将新的序列添加到列表中
-      const newSeriesList = Array.from(seriesInfoMap.values());
-      setSeriesList((prev) => {
-        // 合并序列列表，避免重复
-        const existingUIDs = new Set(prev.map(s => s.seriesInstanceUID));
-        const uniqueNewSeries = newSeriesList.filter(s => !existingUIDs.has(s.seriesInstanceUID));
-        return [...prev, ...uniqueNewSeries];
+      console.log(`📊 总共提取 ${seriesInfoMap.size} 个序列`);
+      console.log('📋 序列详情:');
+      seriesInfoMap.forEach((info, uid) => {
+        console.log(`  - ${info.seriesDescription} (${info.modality}): ${info.numberOfImages} 张图像`);
       });
 
-      // 如果有多个序列，自动显示序列面板
-      if (newSeriesList.length > 0) {
-        setShowSeriesPanel(true);
-        console.log(`✅ 已添加 ${newSeriesList.length} 个序列到列表`);
-      }
+      // 将新的序列添加到列表中
+      const newSeriesList = Array.from(seriesInfoMap.values());
+      console.log(`📦 准备添加 ${newSeriesList.length} 个序列到列表`);
+
+      // 生成缩略图
+      console.log('🎨 开始生成序列缩略图...');
+      await generateThumbnailsForSeries(newSeriesList);
+      console.log('✅ 序列缩略图生成完成');
+      console.log('  序列详情:', newSeriesList.map(s => ({
+        uid: s.seriesInstanceUID.slice(0, 8) + '...',
+        number: s.seriesNumber,
+        description: s.seriesDescription,
+        modality: s.modality,
+        images: s.numberOfImages
+      })));
+
+      setSeriesList((prev) => {
+        console.log('🔄 当前序列列表:', prev.map(s => ({
+          uid: s.seriesInstanceUID.slice(0, 8) + '...',
+          description: s.seriesDescription
+        })));
+
+        // 合并序列列表，避免重复
+        const existingUIDs = new Set(prev.map(s => s.seriesInstanceUID));
+        console.log('🔍 已存在的序列 UIDs:', Array.from(existingUIDs).map(uid => uid.slice(0, 8) + '...'));
+
+        const uniqueNewSeries = newSeriesList.filter(s => {
+          const isNew = !existingUIDs.has(s.seriesInstanceUID);
+          console.log(`  检查序列 ${s.seriesDescription} (${s.seriesInstanceUID.slice(0, 8)}...): ${isNew ? '新序列 ✅' : '已存在 ❌'}`);
+          return isNew;
+        });
+
+        const updatedList = [...prev, ...uniqueNewSeries];
+        console.log(`📝 序列列表更新: ${prev.length} -> ${updatedList.length}`);
+
+        // 延迟设置 showSeriesPanel，确保 setSeriesList 已经完成
+        setTimeout(() => {
+          setShowSeriesPanel(true);
+          console.log(`✅ 已显示序列面板，共 ${updatedList.length} 个序列`);
+          console.log(`🔍 当前状态: showSeriesPanel=true, seriesList.length=${updatedList.length}`);
+        }, 100);
+
+        return updatedList;
+      });
 
       // 创建体积数据
       const volumeId = `my-volume-id-${Date.now()}`;
@@ -501,7 +597,7 @@ function MPRViewer() {
       // 更新当前序列
       setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
       setImageIds(seriesInfo.imageIds);
-      setVolume(newVolume as any); // 类型转换以避免 TypeScript 错误
+      setVolume(newVolume as IVolume); // 类型转换以避免 TypeScript 错误
 
       // 重新渲染所有视口
       renderingEngine.renderViewports(['AXIAL', 'SAGITTAL', 'CORONAL']);
@@ -779,6 +875,12 @@ function MPRViewer() {
     console.log(`✅ 测量面板${docked ? '已嵌入' : '已浮动'}`);
   };
 
+  // 处理序列面板停靠状态变化
+  const handleSeriesPanelPositionChange = (docked: boolean) => {
+    setIsSeriesPanelDocked(docked);
+    console.log(`✅ 序列面板${docked ? '已嵌入' : '已浮动'}`);
+  };
+
   if (!isInitialized) {
     return (
       <div className="loading-overlay">
@@ -1002,9 +1104,9 @@ function MPRViewer() {
         )}
       </div>
 
-      {/* 主内容区域：包含视口和测量面板 */}
-      <div className={`mpr-content ${isPanelDocked ? 'panel-docked' : 'panel-floating'}`}>
-        {/* 三个视口 */}
+      {/* 主内容区域：包含视口、测量面板和序列面板 */}
+      <div className={`mpr-content ${isPanelDocked || isSeriesPanelDocked ? 'has-docked-panels' : ''}`}>
+        {/* 视口区域 */}
         <div ref={viewportsGridRef} className="mpr-viewports">
           <div className="viewport-container">
             <div className="viewport-label">横断位 (Axial)</div>
@@ -1034,23 +1136,41 @@ function MPRViewer() {
           </div>
         </div>
 
-        {/* 测量面板 */}
-        <AnnotationsPanel
-          renderingEngine={renderingEngine}
-          viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
-          onPositionChange={handlePanelPositionChange}
-        />
-      </div>
+        {/* 右侧面板区域 */}
+        <div className="side-panels">
+          {/* 测量面板 */}
+          <AnnotationsPanel
+            renderingEngine={renderingEngine}
+            viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+            onPositionChange={handlePanelPositionChange}
+          />
 
-      {/* 序列面板 */}
-      {showSeriesPanel && seriesList.length > 0 && (
-        <SeriesPanel
-          seriesList={seriesList}
-          currentSeriesUID={currentSeriesUID}
-          onLoadSeries={handleLoadSeries}
-          onClose={() => setShowSeriesPanel(false)}
-        />
-      )}
+          {/* 序列面板 */}
+          {showSeriesPanel && seriesList.length > 0 && (() => {
+            console.log('🎨 渲染序列面板条件检查:', {
+              showSeriesPanel,
+              seriesListLength: seriesList.length,
+              seriesList: seriesList.map(s => ({
+                uid: s.seriesInstanceUID.slice(0, 8),
+                number: s.seriesNumber,
+                description: s.seriesDescription
+              }))
+            });
+            return true;
+          })() && (
+            <SeriesPanel
+              seriesList={seriesList}
+              currentSeriesUID={currentSeriesUID}
+              onLoadSeries={handleLoadSeries}
+              onClose={() => {
+                console.log('❌ 关闭序列面板');
+                setShowSeriesPanel(false);
+              }}
+              onPositionChange={handleSeriesPanelPositionChange}
+            />
+          )}
+        </div>
+      </div>
 
       {/* 控制面板 - 始终在底部 */}
       <div className="control-panel">
