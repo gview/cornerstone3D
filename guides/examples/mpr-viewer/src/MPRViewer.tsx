@@ -53,10 +53,11 @@ function MPRViewer() {
   const [showScale, setShowScale] = useState<boolean>(true);
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const [showCrosshairs, setShowCrosshairs] = useState<boolean>(true);
-  const [isPanelDocked, setIsPanelDocked] = useState<boolean>(false);
-  const [isSeriesPanelDocked, setIsSeriesPanelDocked] = useState<boolean>(false);
   const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
   const [isSeriesPanelCollapsed, setIsSeriesPanelCollapsed] = useState<boolean>(false);
+  const [showAnnotationsPanel, setShowAnnotationsPanel] = useState<boolean>(false);
+  const [isAnnotationsPanelCollapsed, setIsAnnotationsPanelCollapsed] = useState<boolean>(false);
+  const [annotationsPanelPosition, setAnnotationsPanelPosition] = useState<'left' | 'right'>('right');
   const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
   const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
 
@@ -1057,16 +1058,10 @@ function MPRViewer() {
     console.log(`✅ ${toolName} 工具模式已设置为: ${newMode}`);
   };
 
-  // 处理测量面板停靠状态变化
-  const handlePanelPositionChange = (docked: boolean) => {
-    setIsPanelDocked(docked);
-    console.log(`✅ 测量面板${docked ? '已嵌入' : '已浮动'}`);
-  };
-
-  // 处理序列面板停靠状态变化
-  const handleSeriesPanelPositionChange = (docked: boolean) => {
-    setIsSeriesPanelDocked(docked);
-    console.log(`✅ 序列面板${docked ? '已嵌入' : '已浮动'}`);
+  // 处理测量面板位置变化（左/右切换）
+  const handleAnnotationsPanelPositionChange = (position: 'left' | 'right') => {
+    setAnnotationsPanelPosition(position);
+    console.log(`✅ 测量面板已移动到${position === 'left' ? '左侧' : '右侧'}`);
   };
 
   // 计算视口的总切片数 - 现在使用动态计算的总切片数
@@ -1245,13 +1240,45 @@ function MPRViewer() {
         seriesCount={seriesList.length}
         showSeriesPanel={showSeriesPanel}
         onToggleSeriesPanel={() => setShowSeriesPanel(!showSeriesPanel)}
+        showAnnotationsPanel={showAnnotationsPanel}
+        onToggleAnnotationsPanel={() => setShowAnnotationsPanel(!showAnnotationsPanel)}
         hasVolume={!!volume}
       />
 
       {/* 主内容区域 */}
       <div className="mpr-main">
-        {/* 左侧序列面板 */}
-        {showSeriesPanel && seriesList.length > 0 && (
+        {/* 左侧面板区域（序列面板 + 测量面板） */}
+        {annotationsPanelPosition === 'left' && (showSeriesPanel || showAnnotationsPanel) && (
+          <div className="left-panels-container">
+            {/* 左侧序列面板 */}
+            {showSeriesPanel && seriesList.length > 0 && (
+              <SeriesPanel
+                seriesList={seriesList}
+                currentSeriesUID={currentSeriesUID}
+                onLoadSeries={handleLoadSeries}
+                onClose={() => setShowSeriesPanel(false)}
+                isCollapsed={isSeriesPanelCollapsed}
+                onToggleCollapse={() => setIsSeriesPanelCollapsed(!isSeriesPanelCollapsed)}
+              />
+            )}
+
+            {/* 左侧测量面板 */}
+            {showAnnotationsPanel && (
+              <AnnotationsPanel
+                renderingEngine={renderingEngine}
+                viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+                onClose={() => setShowAnnotationsPanel(false)}
+                isCollapsed={isAnnotationsPanelCollapsed}
+                onToggleCollapse={() => setIsAnnotationsPanelCollapsed(!isAnnotationsPanelCollapsed)}
+                panelPosition="left"
+                onPanelPositionChange={handleAnnotationsPanelPositionChange}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 右侧独立序列面板（仅在测量面板在右侧时显示） */}
+        {annotationsPanelPosition === 'right' && showSeriesPanel && seriesList.length > 0 && (
           <SeriesPanel
             seriesList={seriesList}
             currentSeriesUID={currentSeriesUID}
@@ -1342,13 +1369,6 @@ function MPRViewer() {
             </div>
           </div>
 
-          {/* 测量面板 - 浮动在右侧 */}
-          <AnnotationsPanel
-            renderingEngine={renderingEngine}
-            viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
-            onPositionChange={handlePanelPositionChange}
-          />
-
           {/* 体积信息 */}
           {volume && (
             <div className="volume-info">
@@ -1356,6 +1376,19 @@ function MPRViewer() {
             </div>
           )}
         </div>
+
+        {/* 右侧测量面板（仅在面板位置为 right 时显示） */}
+        {annotationsPanelPosition === 'right' && showAnnotationsPanel && (
+          <AnnotationsPanel
+            renderingEngine={renderingEngine}
+            viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+            onClose={() => setShowAnnotationsPanel(false)}
+            isCollapsed={isAnnotationsPanelCollapsed}
+            onToggleCollapse={() => setIsAnnotationsPanelCollapsed(!isAnnotationsPanelCollapsed)}
+            panelPosition="right"
+            onPanelPositionChange={handleAnnotationsPanelPositionChange}
+          />
+        )}
       </div>
     </div>
   );

@@ -28,89 +28,64 @@ interface Annotation {
 interface AnnotationsPanelProps {
   renderingEngine: Types.IRenderingEngine | null;
   viewportIds: string[];
-  onPositionChange?: (isDocked: boolean) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onClose?: () => void;
+  panelPosition?: 'left' | 'right';
+  onPanelPositionChange?: (position: 'left' | 'right') => void;
 }
 
 const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   renderingEngine,
   viewportIds,
-  onPositionChange,
+  isCollapsed = false,
+  onToggleCollapse,
+  onClose,
+  panelPosition = 'right',
+  onPanelPositionChange,
 }) => {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [position, setPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isDocked, setIsDocked] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // 检测是否应该切换到嵌入模式
-  useEffect(() => {
-    const dockThreshold = 50; // 距离左边50px时自动嵌入
-
-    if (position.x <= dockThreshold && !isDocked) {
-      setIsDocked(true);
-      onPositionChange?.(true);
-    } else if (position.x > dockThreshold && isDocked) {
-      setIsDocked(false);
-      onPositionChange?.(false);
-    }
-  }, [position.x, isDocked, onPositionChange]);
-
   // 处理拖拽开始
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // 只响应左键
-    if (e.button !== 0) return;
-
-    const panel = panelRef.current;
-    if (!panel) return;
-
-    const rect = panel.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    });
+  const handleDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return; // 只响应左键
     setIsDragging(true);
-
-    // 如果当前是嵌入模式，拖拽时切换到浮动模式
-    if (isDocked) {
-      setIsDocked(false);
-      onPositionChange?.(false);
-    }
+    setDragStartX(e.clientX);
+    e.preventDefault();
   };
 
   // 处理拖拽移动
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleDragMove = (e: MouseEvent) => {
       if (!isDragging) return;
 
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
+      const deltaX = e.clientX - dragStartX;
+      const threshold = 100; // 拖动超过100px才切换位置
 
-      // 限制在窗口范围内
-      const maxX = window.innerWidth - 300;
-      const maxY = window.innerHeight - 100;
-
-      setPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
+      if (Math.abs(deltaX) > threshold) {
+        const newPosition = deltaX > 0 ? 'right' : 'left';
+        onPanelPositionChange?.(newPosition);
+        setIsDragging(false);
+      }
     };
 
-    const handleMouseUp = () => {
+    const handleDragEnd = () => {
       setIsDragging(false);
     };
 
     if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
 
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
       };
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragStartX, onPanelPositionChange]);
 
   // 刷新标注列表
   const refreshAnnotations = useCallback(() => {
@@ -425,162 +400,176 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   return (
     <div
       ref={panelRef}
-      className={`annotations-panel ${isDocked ? 'docked' : 'floating'}`}
-      style={!isDocked ? {
-        left: `${position.x}px`,
-        top: `${position.y}px`,
+      className={`annotations-sidebar ${isCollapsed ? 'collapsed' : 'expanded'} ${panelPosition}`}
+      style={{
         cursor: isDragging ? 'grabbing' : 'default'
-      } : undefined}
+      }}
     >
+      {/* 面板头部 */}
       <div
-        className="panel-header"
-        onMouseDown={handleMouseDown}
+        className="sidebar-header"
+        onMouseDown={handleDragStart}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        title="拖拽可移动面板位置"
       >
-        <h3>测量面板</h3>
+        {!isCollapsed && <h3>测量面板</h3>}
         <div className="header-actions">
-          <button
-            onClick={showAllAnnotations}
-            className="small-button"
-            title="显示所有标注"
-          >
-            👁️ 全显
-          </button>
+          {!isCollapsed && (
+            <button
+              onClick={showAllAnnotations}
+              className="icon-button"
+              title="显示所有标注"
+            >
+              👁️
+            </button>
+          )}
           <button
             onClick={hideAllAnnotations}
-            className="small-button"
+            className="icon-button"
             title="隐藏所有标注"
           >
-            👁️‍🗨️ 全隐
+            👁️‍🗨️
           </button>
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="small-button"
-            title={isCollapsed ? '展开面板' : '折叠面板'}
-          >
-            {isCollapsed ? '📂' : '📁'}
-          </button>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="icon-button"
+              title={isCollapsed ? '展开面板' : '收缩面板'}
+            >
+              {isCollapsed ? '◀' : '▶'}
+            </button>
+          )}
+          {onClose && !isCollapsed && (
+            <button
+              onClick={onClose}
+              className="icon-button"
+              title="关闭面板"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
+      {/* 测量列表内容 */}
       {!isCollapsed && (
-        <div className="panel-content">
+        <div className="annotations-list">
           {annotations.length === 0 ? (
             <div className="empty-state">
               <p>暂无测量</p>
               <p className="hint">使用测量工具在图像上绘制测量</p>
             </div>
           ) : (
-            <div className="annotations-list">
-              {annotations.map((annotation) => {
-                const isVisible = getAnnotationVisibility(annotation.annotationUID);
-                const toolName = annotation.metadata.toolName || 'Unknown';
-                const label =
-                  annotation.data.label ||
-                  annotation.metadata.label ||
-                  `${getToolDisplayName(toolName)} #${annotation.annotationUID.slice(0, 4)}`;
+            annotations.map((annotation) => {
+              const isVisible = getAnnotationVisibility(annotation.annotationUID);
+              const toolName = annotation.metadata.toolName || 'Unknown';
+              const label =
+                annotation.data.label ||
+                annotation.metadata.label ||
+                `${getToolDisplayName(toolName)} #${annotation.annotationUID.slice(0, 4)}`;
 
-                return (
-                  <div
-                    key={annotation.annotationUID}
-                    className={`annotation-item ${isVisible ? 'visible' : 'hidden'}`}
-                    onClick={() => jumpToAnnotation(annotation)}
-                    style={{ cursor: 'pointer' }}
-                    title="点击跳转到此测量位置"
-                  >
-                    <div className="annotation-info">
-                      <span className="annotation-icon">
-                        {isVisible ? '👁️' : '👁️‍🗨️'}
-                      </span>
-                      <div className="annotation-details">
-                        <div className="annotation-label">{label}</div>
-                        <div className="annotation-type">
-                          {getToolDisplayName(toolName)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="annotation-actions">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          jumpToAnnotation(annotation);
-                        }}
-                        className="jump-button"
-                        title="跳转到此测量"
-                      >
-                        🎯
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleAnnotationVisibility(
-                            annotation.annotationUID,
-                            !isVisible
-                          );
-                        }}
-                        className="visibility-toggle"
-                        title={isVisible ? '隐藏' : '显示'}
-                      >
-                        {isVisible ? '👁️' : '👁️‍🗨️'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteAnnotation(annotation.annotationUID);
-                        }}
-                        className="delete-button"
-                        title="删除此测量"
-                      >
-                        🗑️
-                      </button>
+              return (
+                <div
+                  key={annotation.annotationUID}
+                  className={`annotation-item ${isVisible ? 'visible' : 'hidden'}`}
+                  onClick={() => jumpToAnnotation(annotation)}
+                  style={{ cursor: 'pointer' }}
+                  title="点击跳转到此测量位置"
+                >
+                  <div className="annotation-info">
+                    <span
+                      className="annotation-icon visibility-toggle"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleAnnotationVisibility(
+                          annotation.annotationUID,
+                          !isVisible
+                        );
+                      }}
+                      title={isVisible ? '点击隐藏' : '点击显示'}
+                    >
+                      {isVisible ? '👁️' : '👁️‍🗨️'}
+                    </span>
+                    <div className="annotation-details">
+                      <div className="annotation-label">{label}</div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="annotation-actions">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        jumpToAnnotation(annotation);
+                      }}
+                      className="jump-button"
+                      title="跳转到此测量"
+                    >
+                      🎯
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteAnnotation(annotation.annotationUID);
+                      }}
+                      className="delete-button"
+                      title="删除此测量"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
 
       <style>{`
-        .annotations-panel {
-          width: 300px;
-          max-height: calc(100vh - 40px);
-          background: #2a2a2a;
-          border: 1px solid #444;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-          overflow: hidden;
+        .annotations-sidebar {
+          background: #1e1e1e;
           display: flex;
           flex-direction: column;
+          transition: width 0.3s ease;
+          flex-shrink: 0;
+          /* 确保左侧面板也有最大高度 */
+          max-height: calc(100vh - 40px);
         }
 
-        .annotations-panel.floating {
-          position: fixed;
-          z-index: 1000;
+        /* 右侧模式：左边框 */
+        .annotations-sidebar.right {
+          border-left: 1px solid #3e3e42;
         }
 
-        .annotations-panel.docked {
-          position: relative;
-          z-index: 1;
+        /* 左侧模式：右边框（紧挨着视口） */
+        .annotations-sidebar.left {
+          border-right: 1px solid #3e3e42;
+          border-top: 1px solid #3e3e42;
+          border-radius: 0 8px 8px 0;
         }
 
-        .panel-header {
+        .annotations-sidebar.expanded {
+          width: 320px;
+        }
+
+        .annotations-sidebar.collapsed {
+          width: 40px;
+        }
+
+        .sidebar-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 12px 16px;
-          background: #333;
-          border-bottom: 1px solid #444;
-          user-select: none;
+          padding: 8px 12px;
+          background: #2d2d30;
+          border-bottom: 1px solid #3e3e42;
+          min-height: 40px;
+          flex-shrink: 0; /* 确保头部不会被压缩 */
         }
 
-        .panel-header h3 {
+        .sidebar-header h3 {
           margin: 0;
-          font-size: 16px;
-          color: #fff;
-          font-weight: 600;
-          pointer-events: none;
+          font-size: 12px;
+          color: #cccccc;
+          font-weight: 500;
         }
 
         .header-actions {
@@ -588,58 +577,76 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
           gap: 4px;
         }
 
-        .small-button {
-          padding: 4px 8px;
+        .icon-button {
+          width: 24px;
+          height: 24px;
+          background: none;
+          border: none;
+          color: #cccccc;
           font-size: 12px;
-          background: #444;
-          border: 1px solid #555;
-          color: #fff;
-          border-radius: 4px;
           cursor: pointer;
-          transition: background 0.2s;
+          padding: 0;
+          line-height: 1;
+          opacity: 0.7;
+          transition: opacity 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
         }
 
-        .small-button:hover {
-          background: #555;
+        .icon-button:hover {
+          opacity: 1;
+          background: #3e3e42;
         }
 
-        .panel-content {
+        .annotations-list {
           flex: 1;
           overflow-y: auto;
-          padding: 12px;
+          overflow-x: hidden;
+          padding: 8px;
+          /* 确保列表可以正确滚动 */
+          min-height: 0;
+        }
+
+        .annotations-sidebar.collapsed .annotations-list {
+          display: none;
         }
 
         .empty-state {
           text-align: center;
-          padding: 24px 12px;
-          color: #888;
+          padding: 40px 20px;
+          color: #858585;
+        }
+
+        .empty-state p {
+          margin: 8px 0;
+          font-size: 12px;
         }
 
         .empty-state .hint {
-          font-size: 12px;
-          margin-top: 8px;
-        }
-
-        .annotations-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+          font-size: 11px;
+          color: #6e6e6e;
         }
 
         .annotation-item {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 10px 12px;
-          background: #333;
-          border: 1px solid #444;
-          border-radius: 6px;
-          transition: all 0.2s;
+          padding: 6px 8px;
+          background: #2d2d30;
+          border: 1px solid #3e3e42;
+          border-radius: 4px;
+          margin-bottom: 3px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          /* 减小最小高度，让单行显示更紧凑 */
+          min-height: 32px;
         }
 
         .annotation-item:hover {
-          background: #383838;
-          border-color: #555;
+          background: #37373d;
+          border-color: #007acc;
         }
 
         .annotation-item.hidden {
@@ -649,14 +656,30 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         .annotation-info {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           flex: 1;
           min-width: 0;
         }
 
         .annotation-icon {
-          font-size: 16px;
+          font-size: 12px;
           flex-shrink: 0;
+          cursor: pointer;
+          padding: 2px;
+          border-radius: 3px;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .annotation-icon:hover {
+          background: #3e3e42;
+          opacity: 1;
+        }
+
+        .annotation-icon.visibility-toggle {
+          opacity: 0.8;
         }
 
         .annotation-details {
@@ -665,89 +688,69 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         }
 
         .annotation-label {
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 500;
-          color: #fff;
+          color: #ffffff;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
-
-        .annotation-type {
-          font-size: 11px;
-          color: #888;
-          margin-top: 2px;
+          /* 确保单行显示 */
+          line-height: 1.2;
         }
 
         .annotation-actions {
           flex-shrink: 0;
           display: flex;
-          gap: 6px;
+          gap: 3px;
         }
 
-        .jump-button {
-          padding: 6px 10px;
-          font-size: 14px;
-          background: #28a745;
-          border: 1px solid #218838;
-          border-radius: 4px;
+        .jump-button,
+        .delete-button {
+          padding: 3px 5px;
+          font-size: 11px;
+          background: #3e3e42;
+          border: 1px solid #4e4e52;
+          border-radius: 3px;
           cursor: pointer;
           transition: all 0.2s;
-          color: #fff;
+          color: #cccccc;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          /* 减小按钮尺寸以匹配紧凑布局 */
+          min-width: 24px;
+          height: 24px;
         }
 
         .jump-button:hover {
-          background: #218838;
-          border-color: #1e7e34;
-        }
-
-        .visibility-toggle {
-          padding: 6px 10px;
-          font-size: 14px;
-          background: #444;
-          border: 1px solid #555;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .visibility-toggle:hover {
-          background: #555;
-          border-color: #666;
-        }
-
-        .delete-button {
-          padding: 6px 10px;
-          font-size: 14px;
-          background: #dc3545;
-          border: 1px solid #e74c3c;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
+          background: #28a745;
+          border-color: #218838;
           color: #fff;
         }
 
         .delete-button:hover {
-          background: #e74c3c;
-          border-color: #ff6b6b;
+          background: #dc3545;
+          border-color: #e74c3c;
+          color: #fff;
         }
 
         /* 滚动条样式 */
-        .panel-content::-webkit-scrollbar {
-          width: 6px;
+        .annotations-list::-webkit-scrollbar {
+          width: 10px;
         }
 
-        .panel-content::-webkit-scrollbar-track {
-          background: #2a2a2a;
+        .annotations-list::-webkit-scrollbar-track {
+          background: #1e1e1e;
         }
 
-        .panel-content::-webkit-scrollbar-thumb {
-          background: #555;
-          border-radius: 3px;
+        .annotations-list::-webkit-scrollbar-thumb {
+          background: #424242;
+          border-radius: 5px;
+          border: 2px solid #1e1e1e;
         }
 
-        .panel-content::-webkit-scrollbar-thumb:hover {
-          background: #666;
+        .annotations-list::-webkit-scrollbar-thumb:hover {
+          background: #4e4e4e;
         }
       `}</style>
     </div>

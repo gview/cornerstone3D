@@ -43,6 +43,17 @@ code {
   overflow: hidden;
 }
 
+/* 左侧面板容器（序列 + 测量） */
+.left-panels-container {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  /* 确保容器有明确的高度，子元素才能正确使用 flex: 1 */
+  height: 100%;
+  overflow: hidden; /* 防止容器本身滚动 */
+}
+
 /* 视口区域 */
 .viewport-area {
   flex: 1;
@@ -50,6 +61,8 @@ code {
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  min-width: 0; /* 防止 flex 子项溢出 */
+  height: 100%; /* 确保视口区域占满剩余高度 */
 }
 
 .mpr-viewports {

@@ -35,6 +35,10 @@ export interface ToolbarProps {
   showSeriesPanel: boolean;
   onToggleSeriesPanel: () => void;
 
+  // 测量面板
+  showAnnotationsPanel: boolean;
+  onToggleAnnotationsPanel: () => void;
+
   // 通用状态
   hasVolume: boolean;
 }
@@ -62,6 +66,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   seriesCount,
   showSeriesPanel,
   onToggleSeriesPanel,
+  showAnnotationsPanel,
+  onToggleAnnotationsPanel,
   hasVolume,
 }) => {
   return (
@@ -82,6 +88,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
             title={showSeriesPanel ? '隐藏序列面板' : '显示序列面板'}
           >
             📚 序列
+          </button>
+        )}
+        {hasVolume && (
+          <button
+            onClick={onToggleAnnotationsPanel}
+            className={showAnnotationsPanel ? 'active-button' : ''}
+            title={showAnnotationsPanel ? '隐藏测量面板' : '显示测量面板'}
+          >
+            📏 测量
           </button>
         )}
       </div>

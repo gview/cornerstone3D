@@ -220,23 +220,46 @@ import AnnotationsPanel from './components/AnnotationsPanel';
 <AnnotationsPanel
   renderingEngine={renderingEngine}
   viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
+  onClose={() => setShowAnnotationsPanel(false)}
+  isCollapsed={isAnnotationsPanelCollapsed}
+  onToggleCollapse={() => setIsAnnotationsPanelCollapsed(!isAnnotationsPanelCollapsed)}
+  panelPosition="right"
+  onPanelPositionChange={handleAnnotationsPanelPositionChange}
 />
 ```
 
 **功能特性**：
 - 实时显示所有测量（长度、角度、ROI 等）
 - 点击测量项或点击 🎯 按钮，三视图自动跳转到该测量所在的切片
-- 单个测量的显示/隐藏切换
+- 点击眼睛图标 👁️ 可切换单个测量的显示/隐藏状态
 - 批量显示/隐藏所有测量
 - 删除单个或所有测量
 - 过滤非测量工具（Crosshairs、ScaleOverlay）
 - 使用 `eventTarget` 监听标注变化事件（ANNOTATION_ADDED/REMOVED/MODIFIED）
+- 紧凑的单行显示，节省空间，可显示更多测量项
 
-**测量面板交互**：
-- **拖拽移动**：按住面板标题栏可以拖动面板到任意位置
-- **自动嵌入**：将面板拖动到窗口左边缘（距离 ≤ 50px），面板会自动嵌入到布局中，与视口并排显示而不遮挡
-- **恢复浮动**：从嵌入状态下拖动面板，即可恢复浮动模式
-- **布局自适应**：嵌入模式下，控制面板（层厚、投影模式等）始终保持在底部
+**测量面板布局**：
+- **右侧模式**（默认）：测量面板独立显示在右侧
+- **左侧模式**：拖拽面板到左侧后，与序列面板垂直排列
+  - 序列面板在上
+  - 测量面板在下
+  - 两个面板可独立收缩/展开
+- **拖拽切换**：按住面板标题栏拖动可切换位置
+  - 向右拖动超过 100px → 移动到右侧
+  - 向左拖动超过 100px → 移动到左侧
+
+**面板控制**：
+- **收缩/展开**：点击 ▶/◀ 按钮收缩或展开面板
+  - 收缩时仅显示 40px 宽度
+  - 展开时显示 320px 宽度
+- **关闭面板**：点击 ✕ 按钮关闭面板
+- **工具栏控制**：通过顶部工具栏的"📏 测量"按钮切换面板显示/隐藏
+
+**显示优化**：
+- 单行紧凑设计，每个测量项约 32px 高度
+- 移除重复的工具类型显示，只保留测量名称
+- 眼睛图标既是状态指示器又是切换按钮
+- 支持左右两种位置的滚动显示
 
 ### 序列管理
 
