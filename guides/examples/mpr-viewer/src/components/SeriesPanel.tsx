@@ -37,6 +37,8 @@ interface SeriesPanelProps {
   onLoadSeries: (seriesInfo: SeriesInfo) => void;
   onClose?: () => void;
   onPositionChange?: (docked: boolean) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const SeriesPanel: React.FC<SeriesPanelProps> = ({
@@ -46,6 +48,8 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
   onLoadSeries,
   onClose,
   onPositionChange,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   // Debug logging
   console.log('🎨 SeriesPanel 组件渲染:', {
@@ -56,80 +60,7 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
   });
 
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
-  const [position, setPosition] = useState({ x: 20, y: 80 }); // 默认在右上方
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isDocked, setIsDocked] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  // 检测是否应该切换到嵌入模式（右边缘）
-  useEffect(() => {
-    const dockThreshold = 50; // 距离右边50px时自动嵌入
-    const windowWidth = window.innerWidth;
-
-    if (windowWidth - position.x <= dockThreshold && !isDocked) {
-      setIsDocked(true);
-      onPositionChange?.(true);
-    } else if (windowWidth - position.x > dockThreshold && isDocked) {
-      setIsDocked(false);
-      onPositionChange?.(false);
-    }
-  }, [position.x, isDocked, onPositionChange]);
-
-  // 处理拖拽开始
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // 只响应左键
-    if (e.button !== 0) return;
-
-    const panel = panelRef.current;
-    if (!panel) return;
-
-    const rect = panel.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    });
-    setIsDragging(true);
-
-    // 如果当前是嵌入模式，拖拽时切换到浮动模式
-    if (isDocked) {
-      setIsDocked(false);
-      onPositionChange?.(false);
-    }
-  };
-
-  // 处理拖拽移动
-  React.useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
-
-      // 限制在窗口范围内
-      const maxX = window.innerWidth - 320;
-      const maxY = window.innerHeight - 100;
-
-      setPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, dragOffset]);
 
   // 处理双击序列
   const handleDoubleClick = (seriesInfo: SeriesInfo) => {
@@ -220,183 +151,188 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
     <>
       <div
         ref={panelRef}
-        className={`series-panel ${isDocked ? 'docked' : 'floating'}`}
-        style={!isDocked ? {
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          cursor: isDragging ? 'grabbing' : 'default'
-        } : undefined}
+        className={`series-sidebar ${isCollapsed ? 'collapsed' : 'expanded'}`}
       >
-        <div
-          className="panel-header"
-          onMouseDown={handleMouseDown}
-          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-        >
-          <h3>图像序列</h3>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="close-button"
-              title="关闭面板"
-            >
-              ✕
-            </button>
-          )}
+        {/* 面板头部 */}
+        <div className="sidebar-header">
+          {!isCollapsed && <h3>图像序列</h3>}
+          <div className="header-actions">
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                className="icon-button"
+                title={isCollapsed ? '展开面板' : '收缩面板'}
+              >
+                {isCollapsed ? '▶' : '◀'}
+              </button>
+            )}
+            {onClose && !isCollapsed && (
+              <button
+                onClick={onClose}
+                className="icon-button"
+                title="关闭面板"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="series-list">
-          {seriesList.length === 0 ? (
-              <div className="empty-state">
-                <p>暂无序列</p>
-                <p className="hint">点击上方 "📁 加载 DICOM 文件" 添加序列</p>
-              </div>
-            ) : (
-              studies.map((study) => (
-                <div key={study.studyInstanceUID} className="study-group">
-                  {/* 检查信息头 */}
-                  <div className="study-header">
-                    <div className="study-info">
-                      <div className="patient-info">
-                        {study.patientName && (
-                          <span className="patient-name">{study.patientName}</span>
-                        )}
-                        {study.patientId && (
-                          <span className="patient-id">ID: {study.patientId}</span>
-                        )}
-                      </div>
-                      <div className="study-details">
-                        {study.studyDescription && (
-                          <div className="study-description" title={study.studyDescription}>
-                            {study.studyDescription}
-                          </div>
-                        )}
-                        {study.studyDate && (
-                          <span className="study-date">{formatDate(study.studyDate)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 序列列表 */}
-                  <div className="study-series-list">
-                    {study.series.map((series) => (
-                      <div
-                        key={series.seriesInstanceUID}
-                        className={`series-item-compact ${
-                          currentSeriesUID === series.seriesInstanceUID ? 'active' : ''
-                        } ${hoveredSeries === series.seriesInstanceUID ? 'hovered' : ''}`}
-                        onClick={() => handleDoubleClick(series)}
-                        onMouseEnter={() => setHoveredSeries(series.seriesInstanceUID)}
-                        onMouseLeave={() => setHoveredSeries(null)}
-                        title={`${series.seriesDescription || '未命名序列'} - ${series.numberOfImages} 帧`}
-                      >
-                        {/* 缩略图 */}
-                        <div
-                          className="series-thumbnail-compact"
-                          style={getThumbnailStyle(series)}
-                        >
-                          {!series.thumbnail && (
-                            <span className="modality-label-compact">{series.modality}</span>
+        {/* 序列列表内容 */}
+        {!isCollapsed && (
+          <div className="series-list">
+            {seriesList.length === 0 ? (
+                <div className="empty-state">
+                  <p>暂无序列</p>
+                  <p className="hint">点击上方 "📁 加载 DICOM 文件" 添加序列</p>
+                </div>
+              ) : (
+                studies.map((study) => (
+                  <div key={study.studyInstanceUID} className="study-group">
+                    {/* 检查信息头 */}
+                    <div className="study-header">
+                      <div className="study-info">
+                        <div className="patient-info">
+                          {study.patientName && (
+                            <span className="patient-name">{study.patientName}</span>
+                          )}
+                          {study.patientId && (
+                            <span className="patient-id">ID: {study.patientId}</span>
                           )}
                         </div>
-
-                        {/* 序列信息 */}
-                        <div className="series-info-compact">
-                          <div className="series-row">
-                            <span className="series-number">#{series.seriesNumber}</span>
-                            <span className="series-modality">{series.modality}</span>
-                            <span className="series-images">{series.numberOfImages} 帧</span>
-                          </div>
-                          <div className="series-desc" title={series.seriesDescription}>
-                            {series.seriesDescription || '未命名序列'}
-                          </div>
+                        <div className="study-details">
+                          {study.studyDescription && (
+                            <div className="study-description" title={study.studyDescription}>
+                              {study.studyDescription}
+                            </div>
+                          )}
+                          {study.studyDate && (
+                            <span className="study-date">{formatDate(study.studyDate)}</span>
+                          )}
                         </div>
-
-                        {/* 当前指示器 */}
-                        {currentSeriesUID === series.seriesInstanceUID && (
-                          <div className="current-indicator-compact">✓</div>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-        </div>
+                    </div>
 
-        <div className="series-footer">
-          <small>点击序列加载图像</small>
-        </div>
+                    {/* 序列列表 */}
+                    <div className="study-series-list">
+                      {study.series.map((series) => (
+                        <div
+                          key={series.seriesInstanceUID}
+                          className={`series-item-compact ${
+                            currentSeriesUID === series.seriesInstanceUID ? 'active' : ''
+                          } ${hoveredSeries === series.seriesInstanceUID ? 'hovered' : ''}`}
+                          onClick={() => handleDoubleClick(series)}
+                          onMouseEnter={() => setHoveredSeries(series.seriesInstanceUID)}
+                          onMouseLeave={() => setHoveredSeries(null)}
+                          title={`${series.seriesDescription || '未命名序列'} - ${series.numberOfImages} 帧`}
+                        >
+                          {/* 缩略图 */}
+                          <div
+                            className="series-thumbnail-compact"
+                            style={getThumbnailStyle(series)}
+                          >
+                            {!series.thumbnail && (
+                              <span className="modality-label-compact">{series.modality}</span>
+                            )}
+                          </div>
+
+                          {/* 序列信息 */}
+                          <div className="series-info-compact">
+                            <div className="series-row">
+                              <span className="series-number">#{series.seriesNumber}</span>
+                              <span className="series-modality">{series.modality}</span>
+                              <span className="series-images">{series.numberOfImages} 帧</span>
+                            </div>
+                            <div className="series-desc" title={series.seriesDescription}>
+                              {series.seriesDescription || '未命名序列'}
+                            </div>
+                          </div>
+
+                          {/* 当前指示器 */}
+                          {currentSeriesUID === series.seriesInstanceUID && (
+                            <div className="current-indicator-compact">✓</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+          </div>
+        )}
       </div>
 
       <style>{`
-        .series-panel {
-          width: 360px;
-          max-height: calc(100vh - 100px);
+        .series-sidebar {
           background: #1e1e1e;
-          border: 1px solid #3e3e42;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-          overflow: hidden;
+          border-right: 1px solid #3e3e42;
           display: flex;
           flex-direction: column;
+          transition: width 0.3s ease;
+          flex-shrink: 0;
         }
 
-        .series-panel.floating {
-          position: fixed;
-          z-index: 9999;
+        .series-sidebar.expanded {
+          width: 320px;
         }
 
-        .series-panel.docked {
-          position: relative;
-          z-index: 1;
+        .series-sidebar.collapsed {
+          width: 40px;
         }
 
-        .panel-header {
+        .sidebar-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 10px 12px;
+          padding: 8px 12px;
           background: #2d2d30;
           border-bottom: 1px solid #3e3e42;
-          user-select: none;
+          min-height: 40px;
         }
 
-        .panel-header h3 {
+        .sidebar-header h3 {
           margin: 0;
-          font-size: 13px;
+          font-size: 12px;
           color: #cccccc;
           font-weight: 500;
-          pointer-events: none;
         }
 
-        .panel-header .close-button {
+        .header-actions {
+          display: flex;
+          gap: 4px;
+        }
+
+        .icon-button {
+          width: 24px;
+          height: 24px;
           background: none;
           border: none;
           color: #cccccc;
-          font-size: 16px;
+          font-size: 12px;
           cursor: pointer;
           padding: 0;
           line-height: 1;
           opacity: 0.7;
           transition: opacity 0.2s;
-          width: 20px;
-          height: 20px;
           display: flex;
           align-items: center;
           justify-content: center;
+          border-radius: 4px;
         }
 
-        .panel-header .close-button:hover {
+        .icon-button:hover {
           opacity: 1;
           background: #3e3e42;
-          border-radius: 4px;
         }
 
         .series-list {
           flex: 1;
           overflow-y: auto;
           padding: 4px;
+        }
+
+        .series-sidebar.collapsed .series-list {
+          display: none;
         }
 
         /* 检查分组 */
@@ -579,18 +515,6 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
         .empty-state .hint {
           font-size: 11px;
           color: #6e6e6e;
-        }
-
-        .series-footer {
-          padding: 8px 12px;
-          background: #2d2d30;
-          border-top: 1px solid #3e3e42;
-          text-align: center;
-        }
-
-        .series-footer small {
-          color: #858585;
-          font-size: 10px;
         }
 
         /* 滚动条样式 */

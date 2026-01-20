@@ -26,6 +26,7 @@ import { useObliqueRotation } from './hooks/useObliqueRotation';
 import { initCornerstone } from './cornerstone/init';
 import AnnotationsPanel from './components/AnnotationsPanel';
 import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
+import Toolbar from './components/Toolbar';
 import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
 import type { IVolume } from '@cornerstonejs/core/types';
 
@@ -53,6 +54,7 @@ function MPRViewer() {
   const [isPanelDocked, setIsPanelDocked] = useState<boolean>(false);
   const [isSeriesPanelDocked, setIsSeriesPanelDocked] = useState<boolean>(false);
   const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
+  const [isSeriesPanelCollapsed, setIsSeriesPanelCollapsed] = useState<boolean>(false);
   const [seriesList, setSeriesList] = useState<SeriesInfo[]>([]);
   const [currentSeriesUID, setCurrentSeriesUID] = useState<string | null>(null);
 
@@ -905,306 +907,109 @@ function MPRViewer() {
 
   return (
     <div className="mpr-container">
-      {/* 工具栏 */}
-      <div className="mpr-toolbar">
-        <div className="toolbar-group">
-          <label className="toolbar-label">文件操作:</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".dcm,application/dicom"
-            onChange={handleFileSelect}
-            disabled={isLoading}
-            multiple
-            style={{ display: 'none' }}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".dcm,application/dicom"
+        onChange={handleFileSelect}
+        disabled={isLoading}
+        multiple
+        style={{ display: 'none' }}
+      />
+
+      {/* 顶部工具栏 */}
+      <Toolbar
+        onLoadFiles={() => fileInputRef.current?.click()}
+        imageCount={imageIds.length}
+        activeTool={activeTool}
+        toolModes={toolModes}
+        onToolChange={handleToolChange}
+        onToolModeChange={handleToolModeChange}
+        onToggleCrosshairs={handleToggleCrosshairs}
+        showCrosshairs={showCrosshairs}
+        onRotate={handleRotate}
+        onResetRotation={resetRotation}
+        slabThickness={slabThickness}
+        onSlabThicknessChange={handleSlabThicknessChange}
+        slabMode={slabMode}
+        onSlabModeChange={handleSlabModeChange}
+        showScale={showScale}
+        scaleLocation={scaleLocation}
+        onToggleScale={handleToggleScale}
+        onScaleLocationChange={handleScaleLocationChange}
+        onDeleteSelected={handleDeleteSelected}
+        seriesCount={seriesList.length}
+        showSeriesPanel={showSeriesPanel}
+        onToggleSeriesPanel={() => setShowSeriesPanel(!showSeriesPanel)}
+        hasVolume={!!volume}
+      />
+
+      {/* 主内容区域 */}
+      <div className="mpr-main">
+        {/* 左侧序列面板 */}
+        {showSeriesPanel && seriesList.length > 0 && (
+          <SeriesPanel
+            seriesList={seriesList}
+            currentSeriesUID={currentSeriesUID}
+            onLoadSeries={handleLoadSeries}
+            onClose={() => setShowSeriesPanel(false)}
+            isCollapsed={isSeriesPanelCollapsed}
+            onToggleCollapse={() => setIsSeriesPanelCollapsed(!isSeriesPanelCollapsed)}
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="primary-button"
-          >
-            📁 加载 DICOM 文件
-          </button>
-          {imageIds.length > 0 && (
-            <span className="info-text">
-              已加载 {imageIds.length} 张文件
-            </span>
-          )}
-          {seriesList.length > 0 && (
-            <button
-              onClick={() => setShowSeriesPanel(!showSeriesPanel)}
-              className={showSeriesPanel ? 'active-button' : ''}
-              title={showSeriesPanel ? '隐藏序列面板' : '显示序列面板'}
-            >
-              📚 序列 ({seriesList.length})
-            </button>
-          )}
-        </div>
-
-        <div className="toolbar-group">
-          <label className="toolbar-label">视图旋转:</label>
-          <button onClick={() => handleRotate(15, 'z')} disabled={!volume}>
-            ↺ 向左 15°
-          </button>
-          <button onClick={() => handleRotate(-15, 'z')} disabled={!volume}>
-            向右 15° ↻
-          </button>
-          <button onClick={() => handleRotate(15, 'x')} disabled={!volume}>
-            ↑ 向上 15°
-          </button>
-          <button onClick={() => handleRotate(-15, 'x')} disabled={!volume}>
-            向下 15° ↓
-          </button>
-          <button onClick={resetRotation} disabled={!volume}>
-            🔄 重置
-          </button>
-        </div>
-
-        <div className="toolbar-group">
-          <label className="toolbar-label">工具选择:</label>
-
-          {/* 基础工具组 */}
-          <button
-            onClick={() => handleToolChange(CrosshairsTool.toolName)}
-            disabled={!volume}
-            className={activeTool === CrosshairsTool.toolName ? 'active-button' : ''}
-            title="十字线工具 - 联动三个视口"
-          >
-            🎯 十字线
-          </button>
-          <button
-            onClick={handleToggleCrosshairs}
-            disabled={!volume}
-            className={showCrosshairs ? 'active-button' : ''}
-            title={showCrosshairs ? '隐藏十字线' : '显示十字线'}
-          >
-            {showCrosshairs ? '✓ 显示' : '✗ 隐藏'}
-          </button>
-          <button
-            onClick={() => handleToolChange(WindowLevelTool.toolName)}
-            disabled={!volume}
-            className={activeTool === WindowLevelTool.toolName ? 'active-button' : ''}
-            title="窗宽窗位 - 调整影像对比度"
-          >
-            🎨 窗宽窗位
-          </button>
-
-          {/* 测量工具组 */}
-          <button
-            onClick={() => handleToolChange(LengthTool.toolName)}
-            disabled={!volume}
-            className={activeTool === LengthTool.toolName ? 'active-button' : ''}
-            title="长度测量 - 测量两点间距离"
-          >
-            📏 长度
-          </button>
-          <button
-            onClick={() => handleToolChange(AngleTool.toolName)}
-            disabled={!volume}
-            className={activeTool === AngleTool.toolName ? 'active-button' : ''}
-            title="角度测量 - 测量三条线角度"
-          >
-            📐 角度
-          </button>
-          <button
-            onClick={() => handleToolChange(BidirectionalTool.toolName)}
-            disabled={!volume}
-            className={activeTool === BidirectionalTool.toolName ? 'active-button' : ''}
-            title="双向测量 - 测量长轴和短轴"
-          >
-            📏 双向
-          </button>
-          <button
-            onClick={() => handleToolChange(ProbeTool.toolName)}
-            disabled={!volume}
-            className={activeTool === ProbeTool.toolName ? 'active-button' : ''}
-            title="探针工具 - 查看点位信息"
-          >
-            🔍 探针
-          </button>
-
-          {/* ROI工具组 */}
-          <button
-            onClick={() => handleToolChange(RectangleROITool.toolName)}
-            disabled={!volume}
-            className={activeTool === RectangleROITool.toolName ? 'active-button' : ''}
-            title="矩形ROI - 绘制矩形感兴趣区域"
-          >
-            ⬜ 矩形ROI
-          </button>
-          <button
-            onClick={() => handleToolChange(EllipticalROITool.toolName)}
-            disabled={!volume}
-            className={activeTool === EllipticalROITool.toolName ? 'active-button' : ''}
-            title="椭圆ROI - 绘制椭圆感兴趣区域"
-          >
-            ⭕ 椭圆ROI
-          </button>
-
-          <button
-            onClick={handleDeleteSelected}
-            disabled={!volume}
-            title="删除选中的测量（先点击测量以选中，然后点击此按钮删除）"
-            style={{ backgroundColor: '#dc3545' }}
-          >
-            🗑️ 删除选中
-          </button>
-        </div>
-
-        <div className="toolbar-group">
-          <label className="toolbar-label">工具模式:</label>
-
-          {/* 工具模式选择器 - 只为当前激活的工具显示 */}
-          <select
-            value={toolModes[activeTool]}
-            onChange={(e) => handleToolModeChange(activeTool, e.target.value)}
-            disabled={!volume}
-            title="选择当前工具的模式"
-            style={{ padding: '4px', fontSize: '12px', minWidth: '100px' }}
-          >
-            <option value={ToolModes.Active}>激活 - 可绘制</option>
-            <option value={ToolModes.Passive}>被动 - 可交互</option>
-            <option value={ToolModes.Enabled}>启用 - 仅显示</option>
-            <option value={ToolModes.Disabled}>禁用 - 隐藏</option>
-          </select>
-
-          <span style={{ fontSize: '11px', color: '#888', marginLeft: '8px' }}>
-            当前工具: {activeTool}
-          </span>
-        </div>
-
-        <div className="toolbar-group">
-          <label className="toolbar-label">比例尺:</label>
-          <button
-            onClick={handleToggleScale}
-            disabled={!volume}
-            className={showScale ? 'active-button' : ''}
-            title={showScale ? '隐藏比例尺' : '显示比例尺'}
-          >
-            {showScale ? '📏 显示' : '📏 隐藏'}
-          </button>
-          <select
-            value={scaleLocation}
-            onChange={(e) => handleScaleLocationChange(e.target.value as 'top' | 'bottom' | 'left' | 'right')}
-            disabled={!volume || !showScale}
-            title="选择比例尺位置"
-          >
-            <option value="top">顶部</option>
-            <option value="bottom">底部</option>
-            <option value="left">左侧</option>
-            <option value="right">右侧</option>
-          </select>
-        </div>
-
-        {error && (
-          <div className="error-message">
-            ❌ {error}
-            <button onClick={() => setError(null)} className="close-button">✕</button>
-          </div>
         )}
-      </div>
 
-      {/* 主内容区域：包含视口、测量面板和序列面板 */}
-      <div className={`mpr-content ${isPanelDocked || isSeriesPanelDocked ? 'has-docked-panels' : ''}`}>
         {/* 视口区域 */}
-        <div ref={viewportsGridRef} className="mpr-viewports">
-          <div className="viewport-container">
-            <div className="viewport-label">横断位 (Axial)</div>
-            <div
-              ref={axialRef}
-              className="viewport-element"
-              id="axialViewport"
-            />
+        <div className="viewport-area">
+          {error && (
+            <div className="error-message">
+              ❌ {error}
+              <button onClick={() => setError(null)} className="close-button">✕</button>
+            </div>
+          )}
+
+          <div ref={viewportsGridRef} className="mpr-viewports">
+            <div className="viewport-container">
+              <div className="viewport-label">Axial</div>
+              <div
+                ref={axialRef}
+                className="viewport-element"
+                id="axialViewport"
+              />
+            </div>
+
+            <div className="viewport-container">
+              <div className="viewport-label">Sagittal</div>
+              <div
+                ref={sagittalRef}
+                className="viewport-element"
+                id="sagittalViewport"
+              />
+            </div>
+
+            <div className="viewport-container">
+              <div className="viewport-label">Coronal</div>
+              <div
+                ref={coronalRef}
+                className="viewport-element"
+                id="coronalViewport"
+              />
+            </div>
           </div>
 
-          <div className="viewport-container">
-            <div className="viewport-label">矢状位 (Sagittal)</div>
-            <div
-              ref={sagittalRef}
-              className="viewport-element"
-              id="sagittalViewport"
-            />
-          </div>
-
-          <div className="viewport-container">
-            <div className="viewport-label">冠状位 (Coronal)</div>
-            <div
-              ref={coronalRef}
-              className="viewport-element"
-              id="coronalViewport"
-            />
-          </div>
-        </div>
-
-        {/* 右侧面板区域 */}
-        <div className="side-panels">
-          {/* 测量面板 */}
+          {/* 测量面板 - 浮动在右侧 */}
           <AnnotationsPanel
             renderingEngine={renderingEngine}
             viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
             onPositionChange={handlePanelPositionChange}
           />
 
-          {/* 序列面板 */}
-          {showSeriesPanel && seriesList.length > 0 && (() => {
-            console.log('🎨 渲染序列面板条件检查:', {
-              showSeriesPanel,
-              seriesListLength: seriesList.length,
-              seriesList: seriesList.map(s => ({
-                uid: s.seriesInstanceUID.slice(0, 8),
-                number: s.seriesNumber,
-                description: s.seriesDescription
-              }))
-            });
-            return true;
-          })() && (
-            <SeriesPanel
-              seriesList={seriesList}
-              currentSeriesUID={currentSeriesUID}
-              onLoadSeries={handleLoadSeries}
-              onClose={() => {
-                console.log('❌ 关闭序列面板');
-                setShowSeriesPanel(false);
-              }}
-              onPositionChange={handleSeriesPanelPositionChange}
-            />
+          {/* 体积信息 */}
+          {volume && (
+            <div className="volume-info">
+              📊 {volume.dimensions.join(' × ')}
+            </div>
           )}
         </div>
-      </div>
-
-      {/* 控制面板 - 始终在底部 */}
-      <div className="control-panel">
-        <div className="control-group">
-          <label>层厚 (mm):</label>
-          <input
-            type="range"
-            min="1"
-            max="20"
-            value={slabThickness}
-            onChange={(e) => handleSlabThicknessChange(Number(e.target.value))}
-            disabled={!volume}
-          />
-          <span>{slabThickness}</span>
-        </div>
-
-        <div className="control-group">
-          <label>投影模式:</label>
-          <select
-            value={slabMode}
-            onChange={(e) => handleSlabModeChange(e.target.value as 'max' | 'min' | 'avg')}
-            disabled={!volume}
-          >
-            <option value="max">最大强度投影 (MIP)</option>
-            <option value="min">最小强度投影 (MinIP)</option>
-            <option value="avg">平均投影</option>
-          </select>
-        </div>
-
-        {volume && (
-          <div className="info-text">
-            📊 体积尺寸: {volume.dimensions.join(' × ')}
-          </div>
-        )}
       </div>
     </div>
   );
