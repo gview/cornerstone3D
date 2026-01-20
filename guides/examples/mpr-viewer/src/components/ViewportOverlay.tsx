@@ -1,16 +1,22 @@
 import React from 'react';
 import { Enums } from '@cornerstonejs/core';
+import OrientationSelector, { OrientationSelectorProps } from './OrientationSelector';
 
 export interface ViewportOverlayProps {
   viewportId: string;
   viewportLabel?: string;
   imageIds?: string[];
   currentImageIndex?: number;
+  totalSlices?: number;
   seriesDescription?: string;
   modality?: string;
   patientName?: string;
   windowCenter?: number;
   windowWidth?: number;
+  // 方位相关属性
+  currentOrientation?: Enums.OrientationAxis | string;
+  onOrientationChange?: OrientationSelectorProps['onOrientationChange'];
+  orientationEnabled?: boolean;
 }
 
 const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
@@ -18,22 +24,37 @@ const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
   viewportLabel,
   imageIds = [],
   currentImageIndex = 0,
+  totalSlices = 0,
   seriesDescription = '',
   modality = 'CT',
   patientName = '',
   windowCenter = 40,
   windowWidth = 400,
+  currentOrientation,
+  onOrientationChange,
+  orientationEnabled = true,
 }) => {
-  // 格式化窗宽窗位
+  // 格式化窗宽窗位 - 显示为两行
   const formatWindowLevel = (center: number, width: number) => {
-    return `W/L: ${width} / ${center}`;
+    return { width, center };
   };
 
   return (
     <>
       {/* 左上角 - 视口标签和患者信息 */}
       <div className="overlay-top-left">
-        {viewportLabel && <div className="viewport-name">{viewportLabel}</div>}
+        {onOrientationChange ? (
+          /* 使用方位选择器 */
+          <OrientationSelector
+            viewportId={viewportId}
+            currentOrientation={currentOrientation || viewportLabel || ''}
+            onOrientationChange={onOrientationChange}
+            disabled={!orientationEnabled}
+          />
+        ) : viewportLabel ? (
+          /* 使用静态标签 */
+          <div className="viewport-name">{viewportLabel}</div>
+        ) : null}
         {patientName && <div className="patient-info">{patientName}</div>}
       </div>
 
@@ -49,17 +70,24 @@ const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
 
       {/* 左下角 - 图像索引 */}
       <div className="overlay-bottom-left">
-        {imageIds.length > 0 && (
+        {totalSlices > 0 && (
           <div className="image-index">
-            {currentImageIndex + 1} / {imageIds.length}
+            {currentImageIndex + 1} / {totalSlices}
           </div>
         )}
       </div>
 
       {/* 右下角 - 窗宽窗位 */}
       <div className="overlay-bottom-right">
-        <div className="window-level">
-          {formatWindowLevel(windowCenter, windowWidth)}
+        <div className="window-level-container">
+          <div className="window-level-item">
+            <span className="window-level-label">W:</span>
+            <span className="window-level-value">{formatWindowLevel(windowCenter, windowWidth).width}</span>
+          </div>
+          <div className="window-level-item">
+            <span className="window-level-label">L:</span>
+            <span className="window-level-value">{formatWindowLevel(windowCenter, windowWidth).center}</span>
+          </div>
         </div>
       </div>
 
@@ -158,13 +186,34 @@ const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
         }
 
         /* 窗宽窗位 */
-        .window-level {
+        .window-level-container {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          align-items: flex-end;
+        }
+
+        .window-level-item {
           font-size: 11px;
           color: #cccccc;
           background-color: rgba(0, 0, 0, 0.6);
           padding: 2px 6px;
           border-radius: 3px;
           font-family: monospace;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .window-level-label {
+          font-weight: 600;
+          color: #aaaaaa;
+        }
+
+        .window-level-value {
+          color: #ffffff;
+          min-width: 40px;
+          text-align: right;
         }
       `}</style>
     </>

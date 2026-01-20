@@ -6,6 +6,8 @@
 
 ✅ **三视图联动**: 横断位（Axial）、冠状位（Coronal）、矢状位（Sagittal）自动同步
 ✅ **定位线显示**: 实时显示当前切片在其他视图中的位置
+✅ **四角信息**: 零延迟显示方位、患者信息、切片位置、窗宽窗位
+✅ **方位切换**: 交互式方位选择器，支持任意方向切换
 ✅ **层厚调节**: 支持 MIP、MinIP、Average 等投影模式
 ✅ **斜位 MPR**: 支持任意角度旋转重建
 ✅ **测量工具**: 长度、角度、双向、ROI 标注（矩形、椭圆、圆形等）
@@ -13,7 +15,7 @@
 ✅ **序列管理**: 支持多序列加载，序列缩略图展示，双击切换序列
 ✅ **工具模式**: 支持激活、被动、启用、禁用四种工具模式
 ✅ **比例尺**: 可显示/隐藏，支持四个方位切换
-✅ **性能优化**: 共享 Volume 数据，60fps 流畅渲染
+✅ **性能优化**: 共享 Volume 数据，使用 Cornerstone3D 事件系统，零延迟更新，60fps 流畅渲染
 
 ## 技术栈
 
@@ -172,6 +174,41 @@ function rotateViewport(
   viewport.render();
 }
 ```
+
+### 四角信息显示
+
+使用 `ViewportOverlay` 组件在视口四角显示关键信息：
+
+```typescript
+import ViewportOverlay from './components/ViewportOverlay';
+
+<ViewportOverlay
+  viewportId="AXIAL"
+  viewportLabel="Axial"
+  currentImageIndex={currentImageIndices.AXIAL}
+  totalSlices={totalSlicesForViewports.AXIAL}
+  windowCenter={windowLevels.AXIAL.center}
+  windowWidth={windowLevels.AXIAL.width}
+  currentOrientation={viewportOrientations.AXIAL}
+  onOrientationChange={handleOrientationChange}
+  orientationEnabled={true}
+/>
+```
+
+**显示内容**：
+- **左上角**：交互式方位选择器（Axial/Sagittal/Coronal）+ 患者信息
+- **右上角**：序列描述 + 模态标签
+- **左下角**：当前切片位置（索引/总数）
+- **右下角**：窗宽/窗位（两行显示）
+
+**关键特性**：
+- ✅ **零延迟更新**：使用 Cornerstone3D 事件系统（VOLUME_NEW_IMAGE、VOI_MODIFIED）
+- ✅ **支持任意旋转**：使用 `getImageSliceDataForVolumeViewport` 计算切片索引
+- ✅ **交互式方位切换**：点击方位标签可切换视图方向
+- ✅ **实时窗宽窗位**：拖拽调整窗宽窗位时实时显示
+
+详细实现请参考：
+- 📖 [四角信息更新指南](./VIEWPORT_OVERLAY_GUIDE.md) - 完整的实现指南
 
 ### 测量面板
 
@@ -341,8 +378,89 @@ npm run lint
 - 📖 [多视口同步指南](../../advanced/multi-viewport.md) - 多视口联动原理
 - 📖 [体渲染指南](../../advanced/volume-rendering.md) - 3D 体数据渲染
 - 📖 [测量工具指南](../../advanced/measurements.md) - 标注和测量工具
+- 📖 [切片索引计算详解](./SLICE_INDEX_CALCULATION.md) - 图像位置计算原理和 OHIF 实现参考
+- 📖 [四角信息更新指南](./VIEWPORT_OVERLAY_GUIDE.md) - 视口覆盖层无延迟更新完整指南
 
 ## 故障排查
+
+### 四角信息不更新
+
+**问题**: 滚动切片或调整窗宽窗位时，四角信息显示的值没有实时更新
+
+**解决方案**: 确保使用 Cornerstone3D 的事件系统而不是 DOM 事件：
+
+```typescript
+// ❌ 错误：使用 DOM 事件 + 防抖（有延迟）
+element.addEventListener('wheel', handleMouseEvent);
+setTimeout(() => updateUI(), 50);
+
+// ✅ 正确：使用 Cornerstone3D 事件（零延迟）
+import { Enums } from '@cornerstonejs/core';
+
+// 切片索引更新
+element.addEventListener(Enums.Events.VOLUME_NEW_IMAGE, (event) => {
+  const { imageIndex, numberOfSlices } = event.detail;
+  setCurrentImageIndex(imageIndex);
+  setTotalSlices(numberOfSlices);
+});
+
+// 窗宽窗位更新
+element.addEventListener(Enums.Events.VOI_MODIFIED, (event) => {
+  const { range } = event.detail;
+  const width = range.upper - range.lower;
+  const center = (range.upper + range.lower) / 2;
+  setWindowLevel({ center, width });
+});
+```
+
+### 方位选择器无法点击
+
+**问题**: 视口左上角的方位标签无法点击切换
+
+**解决方案**: 确保覆盖层元素启用 `pointer-events`：
+
+```css
+/* ❌ 错误：继承父级的 pointer-events: none */
+.overlay-top-left {
+  pointer-events: none;
+}
+
+/* ✅ 正确：为交互元素单独设置 */
+.overlay-top-left {
+  pointer-events: none;
+}
+
+.orientation-selector {
+  pointer-events: auto !important; /* 关键 */
+}
+```
+
+### 切片索引计算错误
+
+**问题**: 在旋转视图或斜向视图时，切片索引显示不正确
+
+**原因**: 使用简单的轴映射方法只能处理标准正交视图
+
+**解决方案**: 使用 Cornerstone3D 的 `getImageSliceDataForVolumeViewport` 工具函数：
+
+```typescript
+// ❌ 错误：简单轴映射（不支持旋转）
+switch (orientation) {
+  case 'AXIAL':
+    currentIndex = Math.round((camera.focalPoint[2] - origin[2]) / spacing[2]);
+    break;
+}
+
+// ✅ 正确：使用官方工具函数（支持所有场景）
+import { getImageSliceDataForVolumeViewport } from '@cornerstonejs/core/utilities';
+
+const sliceData = getImageSliceDataForVolumeViewport(viewport);
+const { imageIndex, numberOfSlices } = sliceData;
+```
+
+详细说明请参考：
+- 📖 [切片索引计算详解](./SLICE_INDEX_CALCULATION.md)
+- 📖 [四角信息更新指南](./VIEWPORT_OVERLAY_GUIDE.md)
 
 ### 测量面板不显示新测量
 

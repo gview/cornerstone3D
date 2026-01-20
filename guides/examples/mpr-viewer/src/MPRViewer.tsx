@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RenderingEngine, Enums, volumeLoader, Types, setVolumesForViewports, utilities, metaData } from '@cornerstonejs/core';
+import { getImageSliceDataForVolumeViewport } from '@cornerstonejs/core/utilities';
 import {
   ToolGroupManager,
   addTool,
@@ -64,6 +65,27 @@ function MPRViewer() {
     AXIAL: 0,
     SAGITTAL: 0,
     CORONAL: 0,
+  });
+
+  // 总切片数状态（用于每个视口）
+  const [totalSlicesForViewports, setTotalSlicesForViewports] = useState<Record<string, number>>({
+    AXIAL: 0,
+    SAGITTAL: 0,
+    CORONAL: 0,
+  });
+
+  // 当前方位状态（用于每个视口）
+  const [viewportOrientations, setViewportOrientations] = useState<Record<string, Enums.OrientationAxis>>({
+    AXIAL: Enums.OrientationAxis.AXIAL,
+    SAGITTAL: Enums.OrientationAxis.SAGITTAL,
+    CORONAL: Enums.OrientationAxis.CORONAL,
+  });
+
+  // 当前窗宽窗位状态（用于显示）
+  const [windowLevels, setWindowLevels] = useState<Record<string, { center: number; width: number }>>({
+    AXIAL: { center: 40, width: 400 },
+    SAGITTAL: { center: 40, width: 400 },
+    CORONAL: { center: 40, width: 400 },
   });
 
   // 工具模式状态：记录每个工具的当前模式
@@ -170,6 +192,162 @@ function MPRViewer() {
       }
     };
   }, [renderingEngine]);
+
+  // 监听视口窗宽窗位变化 - 使用 Cornerstone3D 事件系统（无延迟）
+  useEffect(() => {
+    if (!renderingEngine || !volume) return;
+
+    const viewportIds = ['AXIAL', 'SAGITTAL', 'CORONAL'];
+    const handlers: Array<{ element: HTMLElement; handler: (event: any) => void }> = [];
+
+    // 处理 VOI_MODIFIED 事件
+    const handleVOIModified = (viewportId: string) => (event: any) => {
+      const { range } = event.detail;
+
+      if (!range) return;
+
+      // 将 range 转换为窗宽窗位
+      const width = range.upper - range.lower;
+      const center = (range.upper + range.lower) / 2;
+
+      // 直接从事件中获取窗宽窗位，无需重新查询
+      setWindowLevels((prev) => {
+        const current = prev[viewportId];
+        if (current.center !== center || current.width !== width) {
+          return {
+            ...prev,
+            [viewportId]: { center, width },
+          };
+        }
+        return prev;
+      });
+    };
+
+    // 为每个视口添加事件监听
+    viewportIds.forEach((viewportId) => {
+      const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+      if (!viewport || !viewport.element) return;
+
+      const element = viewport.element;
+      const handler = handleVOIModified(viewportId);
+
+      // 监听 VOI_MODIFIED 事件 - 这是 Cornerstone3D 内置的事件
+      // 当窗宽窗位改变时会自动触发，携带 range 信息
+      element.addEventListener(Enums.Events.VOI_MODIFIED, handler);
+
+      handlers.push({ element, handler });
+    });
+
+    // 初始化时获取一次
+    viewportIds.forEach((viewportId) => {
+      try {
+        const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+        if (!viewport) return;
+
+        const properties = viewport.getProperties();
+
+        if (properties.voiRange) {
+          const width = properties.voiRange.upper - properties.voiRange.lower;
+          const center = (properties.voiRange.upper + properties.voiRange.lower) / 2;
+
+          setWindowLevels((prev) => ({
+            ...prev,
+            [viewportId]: { center, width },
+          }));
+        }
+      } catch (error) {
+        // 忽略错误
+      }
+    });
+
+    return () => {
+      // 清理事件监听器
+      handlers.forEach(({ element, handler }) => {
+        element.removeEventListener(Enums.Events.VOI_MODIFIED, handler);
+      });
+    };
+  }, [renderingEngine, volume]);
+
+  // 监听视口切片位置变化 - 使用 Cornerstone3D 事件系统（无延迟）
+  useEffect(() => {
+    if (!renderingEngine || !volume) return;
+
+    const viewportIds = ['AXIAL', 'SAGITTAL', 'CORONAL'];
+    const handlers: Array<{ element: HTMLElement; handler: (event: any) => void }> = [];
+
+    // 处理 VOLUME_NEW_IMAGE 事件
+    const handleVolumeNewImage = (viewportId: string) => (event: any) => {
+      const { imageIndex, numberOfSlices } = event.detail;
+
+      // 直接从事件中获取索引和总数，无需重新计算
+      setCurrentImageIndices((prev) => {
+        if (prev[viewportId] !== imageIndex) {
+          return {
+            ...prev,
+            [viewportId]: imageIndex,
+          };
+        }
+        return prev;
+      });
+
+      setTotalSlicesForViewports((prev) => {
+        if (prev[viewportId] !== numberOfSlices) {
+          return {
+            ...prev,
+            [viewportId]: numberOfSlices,
+          };
+        }
+        return prev;
+      });
+    };
+
+    // 为每个视口添加事件监听
+    viewportIds.forEach((viewportId) => {
+      const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+      if (!viewport || !viewport.element) return;
+
+      const element = viewport.element;
+      const handler = handleVolumeNewImage(viewportId);
+
+      // 监听 VOLUME_NEW_IMAGE 事件 - 这是 Cornerstone3D 内置的事件
+      // 当相机焦点位置改变时会自动触发，携带 imageIndex 和 numberOfSlices
+      element.addEventListener(Enums.Events.VOLUME_NEW_IMAGE, handler);
+
+      handlers.push({ element, handler });
+    });
+
+    // 初始化时获取一次
+    viewportIds.forEach((viewportId) => {
+      try {
+        const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+        if (!viewport) return;
+
+        const sliceData = getImageSliceDataForVolumeViewport(viewport);
+        if (!sliceData) return;
+
+        const { imageIndex, numberOfSlices } = sliceData;
+
+        setCurrentImageIndices((prev) => ({
+          ...prev,
+          [viewportId]: imageIndex,
+        }));
+
+        setTotalSlicesForViewports((prev) => ({
+          ...prev,
+          [viewportId]: numberOfSlices,
+        }));
+      } catch (error) {
+        // 忽略错误
+      }
+    });
+
+    return () => {
+      // 清理事件监听器
+      handlers.forEach(({ element, handler }) => {
+        element.removeEventListener(Enums.Events.VOLUME_NEW_IMAGE, handler);
+      });
+    };
+  }, [renderingEngine, volume]);
 
   // 加载本地 DICOM 文件并创建 Volume
   const loadLocalFiles = async (files: FileList) => {
@@ -891,6 +1069,124 @@ function MPRViewer() {
     console.log(`✅ 序列面板${docked ? '已嵌入' : '已浮动'}`);
   };
 
+  // 计算视口的总切片数 - 现在使用动态计算的总切片数
+  // 该函数已被 getImageSliceDataForVolumeViewport 替代
+  // 保留此函数作为后备
+  const getTotalSlices = (viewportId: string): number => {
+    // 优先使用动态计算的总切片数
+    if (totalSlicesForViewports[viewportId] > 0) {
+      return totalSlicesForViewports[viewportId];
+    }
+
+    // 后备方案：根据体积尺寸和方位计算
+    if (!volume) return 0;
+
+    const { dimensions } = volume;
+    const orientation = viewportOrientations[viewportId];
+
+    switch (orientation) {
+      case Enums.OrientationAxis.AXIAL:
+        return dimensions[2];
+      case Enums.OrientationAxis.SAGITTAL:
+        return dimensions[0];
+      case Enums.OrientationAxis.CORONAL:
+        return dimensions[1];
+      default:
+        return 0;
+    }
+  };
+
+  // 处理视口方位切换
+  const handleOrientationChange = async (viewportId: string, newOrientation: Enums.OrientationAxis) => {
+    if (!renderingEngine || !volume) {
+      console.warn('渲染引擎或体积数据未初始化');
+      return;
+    }
+
+    try {
+      console.log(`🔄 切换视口 ${viewportId} 到方位: ${newOrientation}`);
+
+      // 获取视口
+      const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+      if (!viewport) {
+        console.error(`❌ 无法获取视口 ${viewportId}`);
+        return;
+      }
+
+      // 获取当前相机状态
+      const camera = viewport.getCamera();
+      if (!camera.position || !camera.focalPoint) {
+        console.error('❌ 相机状态无效');
+        return;
+      }
+
+      // 根据方位设置相机的 viewPlaneNormal 和 viewUp
+      let viewPlaneNormal: Types.Point3;
+      let viewUp: Types.Point3;
+
+      switch (newOrientation) {
+        case Enums.OrientationAxis.AXIAL:
+          // 横断位：从上往下看
+          viewPlaneNormal = [0, 0, 1] as Types.Point3;
+          viewUp = [0, 1, 0] as Types.Point3;
+          break;
+        case Enums.OrientationAxis.SAGITTAL:
+          // 矢状位：从侧面看
+          viewPlaneNormal = [1, 0, 0] as Types.Point3;
+          viewUp = [0, 0, 1] as Types.Point3;
+          break;
+        case Enums.OrientationAxis.CORONAL:
+          // 冠状位：从前往后看
+          viewPlaneNormal = [0, 1, 0] as Types.Point3;
+          viewUp = [0, 0, 1] as Types.Point3;
+          break;
+        default:
+          console.warn(`未知方位: ${newOrientation}`);
+          return;
+      }
+
+      // 计算体积中心
+      const { dimensions, spacing, origin } = volume;
+      const center = [
+        origin[0] + (dimensions[0] * spacing[0]) / 2,
+        origin[1] + (dimensions[1] * spacing[1]) / 2,
+        origin[2] + (dimensions[2] * spacing[2]) / 2,
+      ] as Types.Point3;
+
+      // 计算当前相机到焦点的距离
+      const distance = Math.sqrt(
+        Math.pow(camera.position[0] - camera.focalPoint[0], 2) +
+        Math.pow(camera.position[1] - camera.focalPoint[1], 2) +
+        Math.pow(camera.position[2] - camera.focalPoint[2], 2)
+      );
+
+      // 设置新的相机方向和位置
+      viewport.setCamera({
+        viewPlaneNormal,
+        viewUp,
+        focalPoint: center,
+        position: [
+          center[0] + viewPlaneNormal[0] * distance,
+          center[1] + viewPlaneNormal[1] * distance,
+          center[2] + viewPlaneNormal[2] * distance,
+        ] as Types.Point3,
+      });
+
+      // 更新状态
+      setViewportOrientations((prev) => ({
+        ...prev,
+        [viewportId]: newOrientation,
+      }));
+
+      // 重新渲染视口
+      renderingEngine.renderViewports([viewportId]);
+
+      console.log(`✅ 视口 ${viewportId} 方位已切换到: ${newOrientation}`);
+    } catch (error) {
+      console.error('❌ 切换视口方位失败:', error);
+    }
+  };
+
   if (!isInitialized) {
     return (
       <div className="loading-overlay">
@@ -985,12 +1281,17 @@ function MPRViewer() {
               />
               <ViewportOverlay
                 viewportId="AXIAL"
-                viewportLabel="Axial"
+                currentOrientation={viewportOrientations.AXIAL}
+                onOrientationChange={handleOrientationChange}
+                orientationEnabled={!!volume}
                 imageIds={imageIds}
                 currentImageIndex={currentImageIndices.AXIAL}
+                totalSlices={getTotalSlices('AXIAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
+                windowCenter={windowLevels.AXIAL.center}
+                windowWidth={windowLevels.AXIAL.width}
               />
             </div>
 
@@ -1003,12 +1304,17 @@ function MPRViewer() {
               />
               <ViewportOverlay
                 viewportId="SAGITTAL"
-                viewportLabel="Sagittal"
+                currentOrientation={viewportOrientations.SAGITTAL}
+                onOrientationChange={handleOrientationChange}
+                orientationEnabled={!!volume}
                 imageIds={imageIds}
                 currentImageIndex={currentImageIndices.SAGITTAL}
+                totalSlices={getTotalSlices('SAGITTAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
+                windowCenter={windowLevels.SAGITTAL.center}
+                windowWidth={windowLevels.SAGITTAL.width}
               />
             </div>
 
@@ -1021,12 +1327,17 @@ function MPRViewer() {
               />
               <ViewportOverlay
                 viewportId="CORONAL"
-                viewportLabel="Coronal"
+                currentOrientation={viewportOrientations.CORONAL}
+                onOrientationChange={handleOrientationChange}
+                orientationEnabled={!!volume}
                 imageIds={imageIds}
                 currentImageIndex={currentImageIndices.CORONAL}
+                totalSlices={getTotalSlices('CORONAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
+                windowCenter={windowLevels.CORONAL.center}
+                windowWidth={windowLevels.CORONAL.width}
               />
             </div>
           </div>
