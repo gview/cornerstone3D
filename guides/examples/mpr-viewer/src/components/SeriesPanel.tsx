@@ -51,14 +51,6 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
   isCollapsed = false,
   onToggleCollapse,
 }) => {
-  // Debug logging
-  console.log('🎨 SeriesPanel 组件渲染:', {
-    seriesListLength: seriesList.length,
-    currentSeriesUID,
-    hasOnLoadSeries: !!onLoadSeries,
-    hasOnClose: !!onClose
-  });
-
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -540,4 +532,5 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
   );
 };
 
-export default SeriesPanel;
+// 使用 React.memo 优化性能，避免不必要的重新渲染
+export default React.memo(SeriesPanel);

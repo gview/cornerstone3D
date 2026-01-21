@@ -17,6 +17,8 @@ export interface ViewportOverlayProps {
   currentOrientation?: Enums.OrientationAxis | string;
   onOrientationChange?: OrientationSelectorProps['onOrientationChange'];
   orientationEnabled?: boolean;
+  // 激活状态
+  isActive?: boolean;
 }
 
 const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
@@ -33,6 +35,7 @@ const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
   currentOrientation,
   onOrientationChange,
   orientationEnabled = true,
+  isActive = false,
 }) => {
   // 格式化窗宽窗位 - 显示为两行
   const formatWindowLevel = (center: number, width: number) => {
@@ -215,6 +218,54 @@ const ViewportOverlay: React.FC<ViewportOverlayProps> = ({
           min-width: 40px;
           text-align: right;
         }
+
+        /* 激活状态高亮样式 */
+        ${isActive ? `
+          /* 视口名称/方位选择器高亮 */
+          .viewport-name,
+          .orientation-selector {
+            background: linear-gradient(135deg, #007acc 0%, #005a9e 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+            transition: all 0.2s ease-in-out !important;
+          }
+
+          /* 模态标签高亮 */
+          .modality-badge {
+            background: linear-gradient(135deg, #00d084 0%, #00a86b 100%) !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+          }
+
+          /* 序列描述高亮 */
+          .series-description {
+            background-color: rgba(0, 122, 204, 0.4) !important;
+            color: #ffffff !important;
+          }
+
+          /* 患者信息高亮 */
+          .patient-info {
+            background-color: rgba(0, 122, 204, 0.3) !important;
+            color: #ffffff !important;
+          }
+
+          /* 图像索引高亮 */
+          .image-index {
+            background-color: rgba(0, 122, 204, 0.4) !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
+          }
+
+          /* 窗宽窗位高亮 */
+          .window-level-item {
+            background-color: rgba(0, 122, 204, 0.4) !important;
+            color: #ffffff !important;
+          }
+
+          .window-level-value {
+            color: #00d084 !important;
+            font-weight: 600 !important;
+          }
+        ` : ''}
       `}</style>
     </>
   );

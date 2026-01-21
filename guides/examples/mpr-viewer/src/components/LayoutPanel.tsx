@@ -1,6 +1,13 @@
 import React from 'react';
 
 export type ViewportLayout =
+  | 'grid-1x1'      // 单视图
+  | 'grid-1x2'      // 1x2 网格
+  | 'grid-2x1'      // 2x1 网格
+  | 'grid-2x2'      // 2x2 网格
+  | 'grid-1x3'      // 1x3 网格（MPR标准布局）
+  | 'grid-3x1'      // 3x1 网格
+  | 'grid-3x3'      // 3x3 网格
   | 'mpr'           // 标准MPR三视图
   | 'advanced'      // 高级视图
   | '3d-four-up'    // 3D四视图
@@ -26,6 +33,50 @@ interface LayoutPanelProps {
 
 // 布局选项配置
 const layoutOptions: LayoutOption[] = [
+  // Grid 布局
+  {
+    id: 'grid-1x1',
+    name: '1×1',
+    category: 'Grid',
+    icon: '◰',
+  },
+  {
+    id: 'grid-1x2',
+    name: '1×2',
+    category: 'Grid',
+    icon: '◱',
+  },
+  {
+    id: 'grid-2x1',
+    name: '2×1',
+    category: 'Grid',
+    icon: '◲',
+  },
+  {
+    id: 'grid-2x2',
+    name: '2×2',
+    category: 'Grid',
+    icon: '◳',
+  },
+  {
+    id: 'grid-1x3',
+    name: '1×3 (MPR)',
+    category: 'Grid',
+    icon: '▤',
+  },
+  {
+    id: 'grid-3x1',
+    name: '3×1',
+    category: 'Grid',
+    icon: '▥',
+  },
+  {
+    id: 'grid-3x3',
+    name: '3×3',
+    category: 'Grid',
+    icon: '▦',
+  },
+
   // Common 布局
   {
     id: 'mpr',
