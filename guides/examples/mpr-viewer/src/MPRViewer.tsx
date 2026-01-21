@@ -71,10 +71,11 @@ function MPRViewer() {
   const [isLoading, setIsLoading] = useState(false);
   const [imageIds, setImageIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<string>('Crosshairs');
+  const [activeTool, setActiveTool] = useState<string>(WindowLevelTool.toolName);
+  const [isWindowLevelActive, setIsWindowLevelActive] = useState<boolean>(true);
   const [showScale, setShowScale] = useState<boolean>(true);
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
-  const [showCrosshairs, setShowCrosshairs] = useState<boolean>(true);
+  const [showCrosshairs, setShowCrosshairs] = useState<boolean>(false);
   const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
   const [isSeriesPanelCollapsed, setIsSeriesPanelCollapsed] = useState<boolean>(false);
   const [showAnnotationsPanel, setShowAnnotationsPanel] = useState<boolean>(false);
@@ -127,8 +128,8 @@ function MPRViewer() {
 
   // 工具模式状态：记录每个工具的当前模式
   const [toolModes, setToolModes] = useState<Record<string, string>>({
-    Crosshairs: ToolModes.Active,
-    WindowLevel: ToolModes.Passive,
+    Crosshairs: ToolModes.Disabled,
+    WindowLevel: ToolModes.Active,
     Length: ToolModes.Passive,
     Angle: ToolModes.Passive,
     Bidirectional: ToolModes.Passive,
@@ -769,9 +770,37 @@ function MPRViewer() {
       });
 
       // 设置 Crosshairs 工具 - 左键,仅用于MPR三个视口的联动
-      mprToolGroup.setToolActive(CrosshairsTool.toolName, {
-        bindings: [{ mouseButton: MouseBindings.Primary }],
+      // 根据 showCrosshairs 状态决定是否启用十字线
+      console.log('🔧 工具组初始化 - 当前状态:', {
+        showCrosshairs,
+        isWindowLevelActive,
+        activeTool,
       });
+
+      if (showCrosshairs) {
+        mprToolGroup.setToolActive(CrosshairsTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        console.log('✅ 已激活十字线工具');
+      } else {
+        mprToolGroup.setToolDisabled(CrosshairsTool.toolName);
+        console.log('✅ 已禁用十字线工具');
+      }
+
+      // 设置窗宽窗位工具 - 根据 isWindowLevelActive 状态决定是否启用
+      if (isWindowLevelActive) {
+        mprToolGroup.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        console.log('✅ 已激活窗宽窗位工具');
+      } else {
+        mprToolGroup.setToolDisabled(WindowLevelTool.toolName);
+        // 如果窗宽窗位未激活，则激活第一个测量工具
+        mprToolGroup.setToolActive(LengthTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        console.log('✅ 已激活长度测量工具');
+      }
 
       // 启用比例尺工具
       if (showScale) {
@@ -929,6 +958,25 @@ function MPRViewer() {
       return;
     }
 
+    // 如果要启用测量工具，需要先禁用十字线和窗宽窗位
+    if (toolName !== 'Crosshairs' && toolName !== 'WindowLevel') {
+      // 强制隐藏十字线（无论当前状态如何）
+      if (toolGroup.hasTool(CrosshairsTool.toolName)) {
+        // 直接禁用十字线工具
+        toolGroup.setToolDisabled(CrosshairsTool.toolName);
+
+        if (showCrosshairs) {
+          setShowCrosshairs(false);
+        }
+      }
+
+      // 强制禁用窗宽窗位
+      if (isWindowLevelActive) {
+        setIsWindowLevelActive(false);
+        toolGroup.setToolDisabled(WindowLevelTool.toolName);
+      }
+    }
+
     // 如果尝试在单视口模式下激活十字线工具，自动切换到窗宽窗位工具
     if (toolName === CrosshairsTool.toolName && !hasMultipleViewports) {
       console.warn('⚠️ 单视口模式下不支持十字线工具，自动切换到窗宽窗位工具');
@@ -940,7 +988,6 @@ function MPRViewer() {
       }));
 
       setActiveTool(WindowLevelTool.toolName);
-      console.log(`✅ 已激活工具: ${WindowLevelTool.toolName}`);
 
       // 不继续处理 CrosshairsTool
       return;
@@ -968,8 +1015,11 @@ function MPRViewer() {
 
       switchableTools.forEach((t) => {
         if (t !== toolName && toolModes[t] === ToolModes.Active) {
+          // 检查工具是否存在于该 toolGroup 中
           try {
-            tg.setToolPassive(t);
+            if (tg.hasTool(t)) {
+              tg.setToolPassive(t);
+            }
           } catch (error) {
             // 工具可能未添加到此 toolGroup,忽略
           }
@@ -1000,20 +1050,18 @@ function MPRViewer() {
       }));
 
       setActiveTool(toolName);
-      console.log(`✅ 已激活工具: ${toolName}`);
     } else {
-      // 如果不是已知工具，默认激活 Crosshairs
-      toolGroup.setToolActive(CrosshairsTool.toolName, {
+      // 如果不是已知工具，默认激活 Length
+      toolGroup.setToolActive(LengthTool.toolName, {
         bindings: [{ mouseButton: MouseBindings.Primary }],
       });
 
       setToolModes((prev) => ({
         ...prev,
-        [CrosshairsTool.toolName]: ToolModes.Active,
+        [LengthTool.toolName]: ToolModes.Active,
       }));
 
-      setActiveTool(CrosshairsTool.toolName);
-      console.log('✅ 已切换到默认工具（十字线）');
+      setActiveTool(LengthTool.toolName);
     }
   };
 
@@ -1072,7 +1120,6 @@ function MPRViewer() {
   // 处理十字线显示/隐藏
   const handleToggleCrosshairs = () => {
     const newShowCrosshairs = !showCrosshairs;
-    setShowCrosshairs(newShowCrosshairs);
 
     // 根据视口数量选择合适的 toolGroup
     const hasMultipleViewports = viewportIds.length > 1;
@@ -1088,30 +1135,75 @@ function MPRViewer() {
       // 检查是否支持十字线(需要多视口)
       if (!hasMultipleViewports) {
         console.warn('⚠️ 单视口模式下不支持十字线工具');
-        setShowCrosshairs(false);
         return;
+      }
+
+      // 禁用窗宽窗位工具
+      if (isWindowLevelActive) {
+        setIsWindowLevelActive(false);
+        toolGroup.setToolDisabled(WindowLevelTool.toolName);
+      }
+
+      // 将当前测量工具设为 Passive（可见但不可编辑）
+      if (activeTool && toolGroup.hasTool(activeTool)) {
+        toolGroup.setToolPassive(activeTool);
       }
 
       // 启用十字线工具（设置为 active 模式）
       toolGroup.setToolActive(CrosshairsTool.toolName, {
         bindings: [{ mouseButton: MouseBindings.Primary }],
       });
-      setActiveTool(CrosshairsTool.toolName);
+
+      setShowCrosshairs(true);
       console.log('✅ 已启用十字线');
     } else {
       // 完全禁用十字线工具
       toolGroup.setToolDisabled(CrosshairsTool.toolName);
+      setShowCrosshairs(false);
+      console.log('✅ 已禁用十字线');
+    }
+  };
 
-      // 如果当前激活的是十字线工具，则切换到窗宽窗位工具
-      if (activeTool === CrosshairsTool.toolName) {
-        toolGroup.setToolActive(WindowLevelTool.toolName, {
-          bindings: [{ mouseButton: MouseBindings.Primary }],
-        });
-        setActiveTool(WindowLevelTool.toolName);
-        console.log('✅ 已禁用十字线并切换到窗宽窗位工具');
-      } else {
-        console.log('✅ 已禁用十字线');
+  // 处理窗宽窗位调节切换
+  const handleToggleWindowLevel = () => {
+    const newIsActive = !isWindowLevelActive;
+
+    // 根据视口数量选择合适的 toolGroup
+    const hasMultipleViewports = viewportIds.length > 1;
+    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
+    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+    if (!toolGroup) {
+      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+      return;
+    }
+
+    if (newIsActive) {
+      // 禁用十字线
+      if (showCrosshairs) {
+        setShowCrosshairs(false);
+        if (toolGroup.hasTool(CrosshairsTool.toolName)) {
+          toolGroup.setToolDisabled(CrosshairsTool.toolName);
+        }
       }
+
+      // 将当前测量工具设为 Passive（可见但不可编辑）
+      if (activeTool && toolGroup.hasTool(activeTool)) {
+        toolGroup.setToolPassive(activeTool);
+      }
+
+      // 启用窗宽窗位工具
+      toolGroup.setToolActive(WindowLevelTool.toolName, {
+        bindings: [{ mouseButton: MouseBindings.Primary }],
+      });
+
+      setIsWindowLevelActive(true);
+      console.log('✅ 已启用窗宽窗位调节');
+    } else {
+      // 禁用窗宽窗位工具
+      toolGroup.setToolDisabled(WindowLevelTool.toolName);
+      setIsWindowLevelActive(false);
+      console.log('✅ 已禁用窗宽窗位调节');
     }
   };
 
@@ -1516,6 +1608,8 @@ function MPRViewer() {
         onToggleCrosshairs={handleToggleCrosshairs}
         showCrosshairs={showCrosshairs}
         viewportCount={viewportIds.length}
+        onToggleWindowLevel={handleToggleWindowLevel}
+        isWindowLevelActive={isWindowLevelActive}
         onRotate={handleRotate}
         onResetRotation={resetRotation}
         slabThickness={slabThickness}

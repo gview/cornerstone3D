@@ -1,9 +1,11 @@
 import React from 'react';
 import { IconButton, DropdownButton } from './common';
+import SplitButton from './common/SplitButton';
 import { ToolsPanel, ViewControlPanel, EnhancedLayoutPanel } from './panels';
 import type { ViewportLayout } from './panels';
 import './common/IconButton.css';
 import './common/DropdownButton.css';
+import './common/SplitButton.css';
 
 export interface ToolbarProps {
   // 文件操作
@@ -20,6 +22,9 @@ export interface ToolbarProps {
   onToolModeChange: (toolName: string, mode: string) => void;
   onToggleCrosshairs: () => void;
   showCrosshairs: boolean;
+  viewportCount?: number; // 视口数量
+  onToggleWindowLevel: () => void;
+  isWindowLevelActive: boolean;
 
   // 视图控制
   onRotate: (angle: number, axis: 'x' | 'y' | 'z') => void;
@@ -61,6 +66,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onToolModeChange,
   onToggleCrosshairs,
   showCrosshairs,
+  viewportCount = 1,
   onRotate,
   onResetRotation,
   slabThickness,
@@ -78,11 +84,20 @@ const Toolbar: React.FC<ToolbarProps> = ({
   showAnnotationsPanel,
   onToggleAnnotationsPanel,
   hasVolume,
+  onToggleWindowLevel,
+  isWindowLevelActive,
 }) => {
-  // 工具图标映射
+  // 工具配置
+  const allTools = [
+    { name: 'Length', icon: '📏', label: '长度测量' },
+    { name: 'Angle', icon: '📐', label: '角度测量' },
+    { name: 'Bidirectional', icon: '✛', label: '双向测量' },
+    { name: 'Probe', icon: '🔍', label: '探针' },
+    { name: 'RectangleROI', icon: '⬜', label: '矩形 ROI' },
+    { name: 'EllipticalROI', icon: '⭕', label: '椭圆 ROI' },
+  ];
+
   const toolIcons: Record<string, string> = {
-    Crosshairs: '🎯',
-    WindowLevel: '🎨',
     Length: '📏',
     Angle: '📐',
     Bidirectional: '✛',
@@ -92,8 +107,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   const toolLabels: Record<string, string> = {
-    Crosshairs: '十字线',
-    WindowLevel: '窗宽窗位',
     Length: '长度测量',
     Angle: '角度测量',
     Bidirectional: '双向测量',
@@ -102,9 +115,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
     EllipticalROI: '椭圆 ROI',
   };
 
-  // 判断是否为快速访问工具
-  const isQuickAccessTool = activeTool === 'Crosshairs' || activeTool === 'WindowLevel';
-
   // 当前工具的图标和提示
   const currentToolIcon = toolIcons[activeTool] || '📏';
   const currentToolLabel = toolLabels[activeTool] || activeTool;
@@ -112,6 +122,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   // 下拉面板状态
   const [toolsPanelOpen, setToolsPanelOpen] = React.useState(false);
   const [layoutPanelOpen, setLayoutPanelOpen] = React.useState(false);
+  const [measurementMenuOpen, setMeasurementMenuOpen] = React.useState(false);
 
   // 包装工具切换函数，选中后关闭面板
   const handleToolChange = (toolName: string) => {
@@ -123,6 +134,35 @@ const Toolbar: React.FC<ToolbarProps> = ({
   const handleLayoutChange = (layout: ViewportLayout) => {
     onLayoutChange(layout);
     setLayoutPanelOpen(false);
+  };
+
+  // 构建测量工具菜单项
+  const measurementMenuItems = React.useMemo(() => {
+    return allTools.map(tool => ({
+      id: tool.name,
+      icon: tool.icon,
+      label: tool.label,
+      active: activeTool === tool.name && !showCrosshairs && !isWindowLevelActive,
+      onClick: () => onToolChange(tool.name),
+    }));
+  }, [activeTool, onToolChange, showCrosshairs, isWindowLevelActive]);
+
+  // 获取当前激活的测量工具
+  const activeMeasurementTool = React.useMemo(() => {
+    // 只有当没有激活十字线或窗宽窗位时，才显示测量工具为激活
+    if (showCrosshairs || isWindowLevelActive) {
+      // 返回第一个工具但不激活
+      return {
+        ...measurementMenuItems[0],
+        active: false,
+      };
+    }
+    return measurementMenuItems.find(item => item.active) || measurementMenuItems[0];
+  }, [measurementMenuItems, showCrosshairs, isWindowLevelActive]);
+
+  // 主按钮点击 - 激活当前测量工具
+  const handleMeasurementPrimaryClick = () => {
+    onToolChange(activeMeasurementTool.id);
   };
 
   return (
@@ -173,22 +213,44 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </DropdownButton>
       </div>
 
-      {/* 工具选择组 */}
+      {/* 十字线和窗宽窗位控制组 */}
       <div className="toolbar-group">
-        {!isQuickAccessTool && (
-          <IconButton
-            icon={currentToolIcon}
-            onClick={() => onToolChange(activeTool)}
-            tooltip={`当前工具: ${currentToolLabel}`}
-            active={true}
-            disabled={!hasVolume}
-          />
-        )}
-        <DropdownButton
-          icon={isQuickAccessTool ? '📏' : currentToolIcon}
-          tooltip={isQuickAccessTool ? '更多测量工具' : `切换工具 (当前: ${currentToolLabel})`}
+        <IconButton
+          icon="🎯"
+          onClick={onToggleCrosshairs}
+          tooltip={showCrosshairs ? '隐藏十字线' : '显示十字线'}
+          active={showCrosshairs}
+          disabled={!hasVolume || viewportCount <= 1}
+        />
+        <IconButton
+          icon="🎨"
+          onClick={onToggleWindowLevel}
+          tooltip={isWindowLevelActive ? '退出窗宽窗位调节' : '窗宽窗位调节'}
+          active={isWindowLevelActive}
           disabled={!hasVolume}
-          active={!isQuickAccessTool}
+        />
+      </div>
+
+      {/* 测量工具组 */}
+      <div className="toolbar-group">
+        <SplitButton
+          icon={activeMeasurementTool.icon}
+          tooltip={activeMeasurementTool.label}
+          active={activeMeasurementTool.active}
+          disabled={!hasVolume}
+          onPrimaryClick={handleMeasurementPrimaryClick}
+          menuItems={measurementMenuItems}
+          isOpen={measurementMenuOpen}
+          onToggleMenu={setMeasurementMenuOpen}
+        />
+      </div>
+
+      {/* 工具设置组 */}
+      <div className="toolbar-group">
+        <DropdownButton
+          icon="⚙️"
+          tooltip="工具设置"
+          disabled={!hasVolume}
           isOpen={toolsPanelOpen}
           onOpen={() => setToolsPanelOpen(true)}
           onClose={() => setToolsPanelOpen(false)}
@@ -196,11 +258,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <ToolsPanel
             activeTool={activeTool}
             toolModes={toolModes}
-            onToolChange={handleToolChange}
             onToolModeChange={onToolModeChange}
             onDeleteSelected={onDeleteSelected}
-            onToggleCrosshairs={onToggleCrosshairs}
-            showCrosshairs={showCrosshairs}
             hasVolume={hasVolume}
           />
         </DropdownButton>
