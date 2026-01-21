@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RenderingEngine, Enums, volumeLoader, Types, setVolumesForViewports, utilities, metaData } from '@cornerstonejs/core';
 import { getImageSliceDataForVolumeViewport } from '@cornerstonejs/core/utilities';
 import {
@@ -30,10 +30,31 @@ import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
 import Toolbar from './components/Toolbar';
 import ViewportOverlay from './components/ViewportOverlay';
 import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
+import { dynamicViewportManager } from './utils/dynamicViewportManager';
 import type { IVolume } from '@cornerstonejs/core/types';
 import type { ViewportLayout } from './components/panels';
 
 const { MouseBindings, ToolModes } = csToolsEnums;
+
+// 辅助函数：根据布局类型获取网格列定义
+const getGridTemplateColumns = (layout: ViewportLayout): string => {
+  const match = layout.match(/grid-(\d+)x(\d+)/);
+  if (match) {
+    const cols = parseInt(match[2]);  // 第二个数字是列数
+    return Array(cols).fill('1fr').join(' ');
+  }
+  return '1fr 1fr'; // 默认 2 列
+};
+
+// 辅助函数：根据布局类型获取网格行定义
+const getGridTemplateRows = (layout: ViewportLayout): string => {
+  const match = layout.match(/grid-(\d+)x(\d+)/);
+  if (match) {
+    const rows = parseInt(match[1]);  // 第一个数字是行数
+    return Array(rows).fill('1fr').join(' ');
+  }
+  return '1fr 1fr'; // 默认 2 行
+};
 
 // MPR 查看器主组件
 function MPRViewer() {
@@ -64,6 +85,12 @@ function MPRViewer() {
 
   // 视口布局状态
   const [currentLayout, setCurrentLayout] = useState<ViewportLayout>('grid-1x3');
+
+  // 动态视口 ID 列表（初始为3视口MPR布局）
+  const [viewportIds, setViewportIds] = useState<string[]>(['AXIAL', 'SAGITTAL', 'CORONAL']);
+
+  // 激活视口状态
+  const [activeViewportId, setActiveViewportId] = useState<string>('AXIAL');
 
   // 当前图像索引状态（用于每个视口）
   const [currentImageIndices, setCurrentImageIndices] = useState<Record<string, number>>({
@@ -107,24 +134,15 @@ function MPRViewer() {
 
   // 使用层厚调节 Hook
   const { slabThickness, setSlabThickness, slabMode, setSlabMode } = useSlabThickness({
-    viewportIds: ['AXIAL', 'SAGITTAL', 'CORONAL'],
+    viewportIds,
     renderingEngine,
   });
 
   // 使用斜位旋转 Hook
   const { rotateViewport, resetRotation } = useObliqueRotation({
-    viewportIds: ['AXIAL', 'SAGITTAL', 'CORONAL'],
+    viewportIds,
     renderingEngine,
   });
-
-  // 调试：监控序列面板状态变化
-  useEffect(() => {
-    console.log('🔍 序列面板状态更新:', {
-      showSeriesPanel,
-      seriesListLength: seriesList.length,
-      currentSeriesUID
-    });
-  }, [showSeriesPanel, seriesList.length, currentSeriesUID]);
 
   // 初始化 Cornerstone3D
   useEffect(() => {
@@ -202,7 +220,6 @@ function MPRViewer() {
   useEffect(() => {
     if (!renderingEngine || !volume) return;
 
-    const viewportIds = ['AXIAL', 'SAGITTAL', 'CORONAL'];
     const handlers: Array<{ element: HTMLElement; handler: (event: any) => void }> = [];
 
     // 处理 VOI_MODIFIED 事件
@@ -218,7 +235,7 @@ function MPRViewer() {
       // 直接从事件中获取窗宽窗位，无需重新查询
       setWindowLevels((prev) => {
         const current = prev[viewportId];
-        if (current.center !== center || current.width !== width) {
+        if (current?.center !== center || current?.width !== width) {
           return {
             ...prev,
             [viewportId]: { center, width },
@@ -228,7 +245,7 @@ function MPRViewer() {
       });
     };
 
-    // 为每个视口添加事件监听
+    // 为每个视口添加事件监听（使用动态 viewportIds）
     viewportIds.forEach((viewportId) => {
       const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
       if (!viewport || !viewport.element) return;
@@ -271,13 +288,12 @@ function MPRViewer() {
         element.removeEventListener(Enums.Events.VOI_MODIFIED, handler);
       });
     };
-  }, [renderingEngine, volume]);
+  }, [renderingEngine, volume, viewportIds]);
 
   // 监听视口切片位置变化 - 使用 Cornerstone3D 事件系统（无延迟）
   useEffect(() => {
     if (!renderingEngine || !volume) return;
 
-    const viewportIds = ['AXIAL', 'SAGITTAL', 'CORONAL'];
     const handlers: Array<{ element: HTMLElement; handler: (event: any) => void }> = [];
 
     // 处理 VOLUME_NEW_IMAGE 事件
@@ -306,7 +322,7 @@ function MPRViewer() {
       });
     };
 
-    // 为每个视口添加事件监听
+    // 为每个视口添加事件监听（使用动态 viewportIds）
     viewportIds.forEach((viewportId) => {
       const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
       if (!viewport || !viewport.element) return;
@@ -352,7 +368,35 @@ function MPRViewer() {
         element.removeEventListener(Enums.Events.VOLUME_NEW_IMAGE, handler);
       });
     };
-  }, [renderingEngine, volume]);
+  }, [renderingEngine, volume, viewportIds]);
+
+  // 更新动态视口的信息覆盖层
+  useEffect(() => {
+    // 只在动态布局时执行
+    if (currentLayout === 'grid-1x3' && viewportIds[0] === 'AXIAL') {
+      return; // 使用静态结构，不需要更新
+    }
+
+    viewportIds.forEach((viewportId) => {
+      const infoOverlay = document.getElementById(`${viewportId}-info`);
+      if (!infoOverlay) return;
+
+      const imageIndex = currentImageIndices[viewportId] ?? 0;
+      const totalSlices = totalSlicesForViewports[viewportId] ?? 0;
+      const windowCenter = windowLevels[viewportId]?.center ?? 40;
+      const windowWidth = windowLevels[viewportId]?.width ?? 400;
+
+      const imageInfo = infoOverlay.querySelector('.image-info');
+      const windowInfo = infoOverlay.querySelector('.window-info');
+
+      if (imageInfo) {
+        imageInfo.textContent = `Image: ${imageIndex + 1} / ${totalSlices}`;
+      }
+      if (windowInfo) {
+        windowInfo.textContent = `W/L: ${windowCenter.toFixed(0)} / ${windowWidth.toFixed(0)}`;
+      }
+    });
+  }, [currentLayout, viewportIds, currentImageIndices, totalSlicesForViewports, windowLevels]);
 
   // 加载本地 DICOM 文件并创建 Volume
   const loadLocalFiles = async (files: FileList) => {
@@ -401,11 +445,6 @@ function MPRViewer() {
           const generalStudyModule = metaData.get('generalStudyModule', imageId);
           const patientModule = metaData.get('patientModule', imageId);
 
-          console.log(`📋 ImageID: ${imageId.slice(0, 20)}...`);
-          console.log('  seriesModule:', seriesModule);
-          console.log('  generalSeriesModule:', generalSeriesModule);
-          console.log('  generalStudyModule:', generalStudyModule);
-          console.log('  patientModule:', patientModule);
 
           // 尝试多种方式获取序列信息
           if (generalSeriesModule) {
@@ -473,55 +512,28 @@ function MPRViewer() {
       }
 
       console.log(`📊 总共提取 ${seriesInfoMap.size} 个序列`);
-      console.log('📋 序列详情:');
-      seriesInfoMap.forEach((info, uid) => {
-        console.log(`  - ${info.seriesDescription} (${info.modality}): ${info.numberOfImages} 张图像`);
-      });
 
       // 将新的序列添加到列表中
       const newSeriesList = Array.from(seriesInfoMap.values());
-      console.log(`📦 准备添加 ${newSeriesList.length} 个序列到列表`);
 
       // 生成缩略图
       console.log('🎨 开始生成序列缩略图...');
       await generateThumbnailsForSeries(newSeriesList);
       console.log('✅ 序列缩略图生成完成');
-      console.log('  序列详情:', newSeriesList.map(s => ({
-        uid: s.seriesInstanceUID.slice(0, 8) + '...',
-        number: s.seriesNumber,
-        description: s.seriesDescription,
-        modality: s.modality,
-        images: s.numberOfImages
-      })));
 
       setSeriesList((prev) => {
-        console.log('🔄 当前序列列表:', prev.map(s => ({
-          uid: s.seriesInstanceUID.slice(0, 8) + '...',
-          description: s.seriesDescription
-        })));
-
         // 合并序列列表，避免重复
         const existingUIDs = new Set(prev.map(s => s.seriesInstanceUID));
-        console.log('🔍 已存在的序列 UIDs:', Array.from(existingUIDs).map(uid => uid.slice(0, 8) + '...'));
-
-        const uniqueNewSeries = newSeriesList.filter(s => {
-          const isNew = !existingUIDs.has(s.seriesInstanceUID);
-          console.log(`  检查序列 ${s.seriesDescription} (${s.seriesInstanceUID.slice(0, 8)}...): ${isNew ? '新序列 ✅' : '已存在 ❌'}`);
-          return isNew;
-        });
-
+        const uniqueNewSeries = newSeriesList.filter(s => !existingUIDs.has(s.seriesInstanceUID));
         const updatedList = [...prev, ...uniqueNewSeries];
-        console.log(`📝 序列列表更新: ${prev.length} -> ${updatedList.length}`);
 
-        // 延迟设置 showSeriesPanel，确保 setSeriesList 已经完成
-        setTimeout(() => {
-          setShowSeriesPanel(true);
-          console.log(`✅ 已显示序列面板，共 ${updatedList.length} 个序列`);
-          console.log(`🔍 当前状态: showSeriesPanel=true, seriesList.length=${updatedList.length}`);
-        }, 100);
+        console.log(`📝 序列列表更新: ${prev.length} -> ${updatedList.length}`);
 
         return updatedList;
       });
+
+      // 显示序列面板
+      setShowSeriesPanel(true);
 
       // 创建体积数据
       const volumeId = `my-volume-id-${Date.now()}`;
@@ -535,9 +547,8 @@ function MPRViewer() {
       volume.load();
       console.log('✅ 开始加载体积数据...');
 
+      // 合并状态更新
       setVolume(volume);
-
-      // 设置当前加载的序列
       if (newSeriesList.length > 0) {
         setCurrentSeriesUID(newSeriesList[0].seriesInstanceUID);
       }
@@ -661,78 +672,107 @@ function MPRViewer() {
         console.log('ℹ️ 工具已经注册');
       }
 
-      // 创建工具组
-      const toolGroupId = 'mprToolGroup';
-      let toolGroup;
-      try {
-        toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
-      } catch (error) {
-        console.log('⚠️ 工具组已存在，复用现有工具组');
-        toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+      // 创建两个工具组: 'default' 用于单视口, 'mpr' 用于多视口MPR
+      const defaultToolGroupId = 'default';
+      const mprToolGroupId = 'mpr';
+
+      // 创建或获取 'default' 工具组 (单视口使用,无 Crosshairs)
+      let defaultToolGroup = ToolGroupManager.getToolGroup(defaultToolGroupId);
+      if (!defaultToolGroup) {
+        try {
+          defaultToolGroup = ToolGroupManager.createToolGroup(defaultToolGroupId);
+          console.log('✅ 创建 default 工具组 (单视口模式)');
+        } catch (error) {
+          console.warn('⚠️ 创建 default 工具组失败:', error);
+        }
       }
 
-      if (!toolGroup) {
+      // 创建或获取 'mpr' 工具组 (多视口MPR使用,有 Crosshairs)
+      let mprToolGroup = ToolGroupManager.getToolGroup(mprToolGroupId);
+      if (!mprToolGroup) {
+        try {
+          mprToolGroup = ToolGroupManager.createToolGroup(mprToolGroupId);
+          console.log('✅ 创建 mpr 工具组 (多视口MPR模式)');
+        } catch (error) {
+          console.warn('⚠️ 创建 mpr 工具组失败:', error);
+        }
+      }
+
+      if (!defaultToolGroup || !mprToolGroup) {
         console.error('❌ 无法创建或获取工具组');
         return;
       }
 
-      // 添加工具到工具组
-      toolGroup.addTool(PanTool.toolName);
-      toolGroup.addTool(ZoomTool.toolName, {
-        minZoomScale: 0.001,
-        maxZoomScale: 4000,
-      });
-      toolGroup.addTool(StackScrollTool.toolName);
-      toolGroup.addTool(CrosshairsTool.toolName);
-      toolGroup.addTool(WindowLevelTool.toolName);
-      toolGroup.addTool(LengthTool.toolName);
-      toolGroup.addTool(AngleTool.toolName);
-      toolGroup.addTool(BidirectionalTool.toolName);
-      toolGroup.addTool(ProbeTool.toolName);
-      toolGroup.addTool(RectangleROITool.toolName);
-      toolGroup.addTool(EllipticalROITool.toolName);
-      toolGroup.addTool(ScaleOverlayTool.toolName, {
-        configuration: {
-          scaleLocation: scaleLocation,
-        },
+      // 为两个工具组添加相同的工具
+      [defaultToolGroup, mprToolGroup].forEach((toolGroup) => {
+        try {
+          toolGroup.addTool(PanTool.toolName);
+          toolGroup.addTool(ZoomTool.toolName, {
+            minZoomScale: 0.001,
+            maxZoomScale: 4000,
+          });
+          toolGroup.addTool(StackScrollTool.toolName);
+          toolGroup.addTool(WindowLevelTool.toolName);
+          toolGroup.addTool(LengthTool.toolName);
+          toolGroup.addTool(AngleTool.toolName);
+          toolGroup.addTool(BidirectionalTool.toolName);
+          toolGroup.addTool(ProbeTool.toolName);
+          toolGroup.addTool(RectangleROITool.toolName);
+          toolGroup.addTool(EllipticalROITool.toolName);
+          toolGroup.addTool(ScaleOverlayTool.toolName, {
+            configuration: {
+              scaleLocation: scaleLocation,
+            },
+          });
+
+          // 只为 mpr 工具组添加 Crosshairs 工具
+          if (toolGroup.id === mprToolGroupId) {
+            toolGroup.addTool(CrosshairsTool.toolName);
+          }
+        } catch (error) {
+          // 工具已添加,忽略
+        }
       });
 
-      // 将工具组应用到视口（必须在设置工具活动状态之前）
-      toolGroup.addViewport('AXIAL', 'mprEngine');
-      toolGroup.addViewport('SAGITTAL', 'mprEngine');
-      toolGroup.addViewport('CORONAL', 'mprEngine');
+      // 当前是3视口MPR布局,使用 mpr 工具组
+      const activeToolGroupId = mprToolGroupId;
+
+      // 将视口添加到 mpr 工具组
+      ['AXIAL', 'SAGITTAL', 'CORONAL'].forEach((viewportId) => {
+        mprToolGroup.addViewport(viewportId, 'mprEngine');
+      });
 
       // 设置平移工具 - 中键
-      toolGroup.setToolActive(PanTool.toolName, {
+      mprToolGroup.setToolActive(PanTool.toolName, {
         bindings: [
           { mouseButton: MouseBindings.Auxiliary },
         ],
       });
 
       // 设置缩放工具 - 右键
-      toolGroup.setToolActive(ZoomTool.toolName, {
+      mprToolGroup.setToolActive(ZoomTool.toolName, {
         bindings: [
           { mouseButton: MouseBindings.Secondary },
         ],
       });
 
       // 设置滚轮换层工具 - 滚轮
-      toolGroup.setToolActive(StackScrollTool.toolName, {
+      mprToolGroup.setToolActive(StackScrollTool.toolName, {
         bindings: [
           { mouseButton: MouseBindings.Wheel },
         ],
       });
 
-      // 设置 Crosshairs 工具 - 左键,用于MPR三个视口的联动
-      toolGroup.setToolActive(CrosshairsTool.toolName, {
+      // 设置 Crosshairs 工具 - 左键,仅用于MPR三个视口的联动
+      mprToolGroup.setToolActive(CrosshairsTool.toolName, {
         bindings: [{ mouseButton: MouseBindings.Primary }],
       });
 
       // 启用比例尺工具
       if (showScale) {
-        toolGroup.setToolEnabled(ScaleOverlayTool.toolName);
+        mprToolGroup.setToolEnabled(ScaleOverlayTool.toolName);
       } else {
-        toolGroup.setToolDisabled(ScaleOverlayTool.toolName);
+        mprToolGroup.setToolDisabled(ScaleOverlayTool.toolName);
       }
 
       console.log('✅ 工具组配置完成');
@@ -762,7 +802,7 @@ function MPRViewer() {
   };
 
   // 处理加载序列
-  const handleLoadSeries = async (seriesInfo: SeriesInfo) => {
+  const handleLoadSeries = useCallback(async (seriesInfo: SeriesInfo) => {
     if (!renderingEngine) {
       console.warn('渲染引擎未初始化');
       return;
@@ -772,6 +812,21 @@ function MPRViewer() {
       setIsLoading(true);
       console.log(`🔄 正在切换到序列 ${seriesInfo.seriesNumber}: ${seriesInfo.seriesDescription}`);
 
+      // 获取工具组，暂时禁用十字线工具以避免重复的重置操作
+      const toolGroup = ToolGroupManager.getToolGroup('mpr');
+      // 检查十字线工具是否处于激活状态
+      const crosshairsTool = toolGroup?.getToolInstance(CrosshairsTool.toolName);
+      const crosshairsWasActive = crosshairsTool?.active === true;
+
+      // 如果十字线工具处于激活状态，暂时禁用它
+      if (toolGroup && crosshairsWasActive) {
+        try {
+          toolGroup.setToolDisabled('Crosshairs');
+        } catch (error) {
+          // 忽略错误
+        }
+      }
+
       // 使用序列的 imageIds 创建新的体积数据
       const volumeId = `volume-${seriesInfo.seriesInstanceUID}`;
       const newVolume = await volumeLoader.createAndCacheVolume(volumeId, {
@@ -780,6 +835,11 @@ function MPRViewer() {
 
       newVolume.load();
 
+      // 先更新状态
+      setImageIds(seriesInfo.imageIds);
+      setVolume(newVolume as IVolume);
+      setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
+
       // 为所有视口设置新的 volume
       await setVolumesForViewports(
         renderingEngine,
@@ -787,10 +847,16 @@ function MPRViewer() {
         ['AXIAL', 'SAGITTAL', 'CORONAL']
       );
 
-      // 更新当前序列
-      setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
-      setImageIds(seriesInfo.imageIds);
-      setVolume(newVolume as IVolume); // 类型转换以避免 TypeScript 错误
+      // 重新启用十字线工具（如果之前是激活的）
+      if (toolGroup && crosshairsWasActive) {
+        try {
+          toolGroup.setToolActive('Crosshairs', {
+            bindings: [{ mouseButton: MouseBindings.Primary }],
+          });
+        } catch (error) {
+          // 忽略错误
+        }
+      }
 
       // 重新渲染所有视口
       renderingEngine.renderViewports(['AXIAL', 'SAGITTAL', 'CORONAL']);
@@ -802,12 +868,37 @@ function MPRViewer() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [renderingEngine]);
 
   // 处理层厚变化
   const handleSlabThicknessChange = (value: number) => {
     setSlabThickness(value);
   };
+
+  // 稳定的回调函数 - 用于 SeriesPanel
+  const handleCloseSeriesPanel = useCallback(() => {
+    setShowSeriesPanel(false);
+  }, []);
+
+  const handleToggleSeriesPanelCollapse = useCallback(() => {
+    setIsSeriesPanelCollapsed(prev => !prev);
+  }, []);
+
+  const handleCloseAnnotationsPanel = useCallback(() => {
+    setShowAnnotationsPanel(false);
+  }, []);
+
+  const handleToggleAnnotationsPanelCollapse = useCallback(() => {
+    setIsAnnotationsPanelCollapsed(prev => !prev);
+  }, []);
+
+  const handleToggleSeriesPanel = useCallback(() => {
+    setShowSeriesPanel(prev => !prev);
+  }, []);
+
+  const handleToggleAnnotationsPanel = useCallback(() => {
+    setShowAnnotationsPanel(prev => !prev);
+  }, []);
 
   // 处理投影模式变化
   const handleSlabModeChange = (mode: 'max' | 'min' | 'avg') => {
@@ -823,11 +914,30 @@ function MPRViewer() {
   const handleToolChange = (toolName: string) => {
     if (!renderingEngine) return;
 
-    const toolGroupId = 'mprToolGroup';
+    // 根据视口数量选择合适的 toolGroup
+    const hasMultipleViewports = viewportIds.length > 1;
+    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
     if (!toolGroup) {
-      console.error('❌ 无法获取工具组');
+      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+      return;
+    }
+
+    // 如果尝试在单视口模式下激活十字线工具，自动切换到窗宽窗位工具
+    if (toolName === CrosshairsTool.toolName && !hasMultipleViewports) {
+      console.warn('⚠️ 单视口模式下不支持十字线工具，自动切换到窗宽窗位工具');
+
+      // 更新该工具的模式状态为 Active
+      setToolModes((prev) => ({
+        ...prev,
+        [WindowLevelTool.toolName]: ToolModes.Active,
+      }));
+
+      setActiveTool(WindowLevelTool.toolName);
+      console.log(`✅ 已激活工具: ${WindowLevelTool.toolName}`);
+
+      // 不继续处理 CrosshairsTool
       return;
     }
 
@@ -844,10 +954,27 @@ function MPRViewer() {
     ];
 
     // 只将其他 Active 的工具改为 Passive，保留其他工具的状态
+    // 注意: 需要同时更新两个 toolGroup 的状态
+    const defaultToolGroup = ToolGroupManager.getToolGroup('default');
+    const mprToolGroup = ToolGroupManager.getToolGroup('mpr');
+
+    [defaultToolGroup, mprToolGroup].forEach((tg) => {
+      if (!tg) return;
+
+      switchableTools.forEach((t) => {
+        if (t !== toolName && toolModes[t] === ToolModes.Active) {
+          try {
+            tg.setToolPassive(t);
+          } catch (error) {
+            // 工具可能未添加到此 toolGroup,忽略
+          }
+        }
+      });
+    });
+
+    // 更新状态
     switchableTools.forEach((t) => {
       if (t !== toolName && toolModes[t] === ToolModes.Active) {
-        toolGroup.setToolPassive(t);
-        // 更新状态
         setToolModes((prev) => ({
           ...prev,
           [t]: ToolModes.Passive,
@@ -942,15 +1069,24 @@ function MPRViewer() {
     const newShowCrosshairs = !showCrosshairs;
     setShowCrosshairs(newShowCrosshairs);
 
-    const toolGroupId = 'mprToolGroup';
+    // 根据视口数量选择合适的 toolGroup
+    const hasMultipleViewports = viewportIds.length > 1;
+    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
     if (!toolGroup) {
-      console.error('❌ 无法获取工具组');
+      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
       return;
     }
 
     if (newShowCrosshairs) {
+      // 检查是否支持十字线(需要多视口)
+      if (!hasMultipleViewports) {
+        console.warn('⚠️ 单视口模式下不支持十字线工具');
+        setShowCrosshairs(false);
+        return;
+      }
+
       // 启用十字线工具（设置为 active 模式）
       toolGroup.setToolActive(CrosshairsTool.toolName, {
         bindings: [{ mouseButton: MouseBindings.Primary }],
@@ -972,6 +1108,12 @@ function MPRViewer() {
         console.log('✅ 已禁用十字线');
       }
     }
+  };
+
+  // 处理视口激活
+  const handleViewportClick = (viewportId: string) => {
+    setActiveViewportId(viewportId);
+    console.log(`✅ 激活视口: ${viewportId}`);
   };
 
   // 处理删除选中的测量
@@ -1007,11 +1149,13 @@ function MPRViewer() {
   const handleToolModeChange = (toolName: string, newMode: string) => {
     if (!renderingEngine) return;
 
-    const toolGroupId = 'mprToolGroup';
+    // 根据视口数量选择合适的 toolGroup
+    const hasMultipleViewports = viewportIds.length > 1;
+    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
     if (!toolGroup) {
-      console.error('❌ 无法获取工具组');
+      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
       return;
     }
 
@@ -1032,10 +1176,26 @@ function MPRViewer() {
 
     if (newMode === ToolModes.Active) {
       // 如果切换到 Active 模式，只将其他 Active 的工具改为 Passive，保留其他工具的状态
+      // 需要同时更新两个 toolGroup
+      const defaultToolGroup = ToolGroupManager.getToolGroup('default');
+      const mprToolGroup = ToolGroupManager.getToolGroup('mpr');
+
+      [defaultToolGroup, mprToolGroup].forEach((tg) => {
+        if (!tg) return;
+        switchableTools.forEach((t) => {
+          if (t !== toolName && toolModes[t] === ToolModes.Active) {
+            try {
+              tg.setToolPassive(t);
+            } catch (error) {
+              // 工具可能未添加到此 toolGroup,忽略
+            }
+          }
+        });
+      });
+
+      // 更新状态
       switchableTools.forEach((t) => {
         if (t !== toolName && toolModes[t] === ToolModes.Active) {
-          toolGroup.setToolPassive(t);
-          // 更新状态
           setToolModes((prev) => ({
             ...prev,
             [t]: ToolModes.Passive,
@@ -1069,20 +1229,45 @@ function MPRViewer() {
   };
 
   // 处理布局切换
-  const handleLayoutChange = (layout: ViewportLayout) => {
-    console.log(`🔄 切换布局到: ${layout}`);
-
-    // 网格布局处理 (暂时只记录日志，实际实现需要更多代码)
-    if (layout.startsWith('grid-')) {
-      const [, rows, cols] = layout.split('-')[1].split('x').map(Number);
-      console.log(`  网格布局: ${rows}行 x ${cols}列`);
-      // TODO: 实现网格布局切换逻辑
-    } else {
-      console.log(`  协议布局: ${layout}`);
-      // TODO: 实现协议布局切换逻辑
+  const handleLayoutChange = async (layout: ViewportLayout) => {
+    if (!renderingEngine || !volume) {
+      console.warn('无法切换布局: 渲染引擎或体积数据未初始化');
+      return;
     }
 
+    // 简化版本：只更新布局状态，让CSS样式自动调整
+    // 注意：当前实现只支持3视口布局（grid-1x3, grid-3x1），其他布局可能显示不正确
     setCurrentLayout(layout);
+
+    // 等待 DOM 更新和 CSS 样式生效
+    // 然后触发 resize 事件，让 Cornerstone3D 重新计算视口大小比例
+    setTimeout(() => {
+      if (renderingEngine && viewportsGridRef.current) {
+        // 使用 resize(true, true) 来强制视口重新计算大小
+        // 参数1: immediate - 立即执行
+        // 参数2: forceResize - 强制触发 resize 事件
+        renderingEngine.resize(true, true);
+
+        // 重置所有视口的缩放和位置，使图像适应视口
+        viewportIds.forEach((viewportId) => {
+          try {
+            const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
+            if (!viewport) return;
+
+            // 重置相机以适应窗口
+            viewport.resetCamera();
+            console.log(`✅ 视口 ${viewportId} 已重置相机，图像已适应窗口`);
+          } catch (error) {
+            console.warn(`⚠️ 重置视口 ${viewportId} 失败:`, error);
+          }
+        });
+
+        // 重新渲染所有视口
+        renderingEngine.renderViewports(viewportIds);
+
+        console.log(`✅ 布局已切换到: ${layout}，视口已重新计算大小并重置相机`);
+      }
+    }, 150); // 增加延迟确保 DOM 更新完成
   };
 
   // 计算视口的总切片数 - 现在使用动态计算的总切片数
@@ -1248,6 +1433,7 @@ function MPRViewer() {
         onToolModeChange={handleToolModeChange}
         onToggleCrosshairs={handleToggleCrosshairs}
         showCrosshairs={showCrosshairs}
+        viewportCount={viewportIds.length}
         onRotate={handleRotate}
         onResetRotation={resetRotation}
         slabThickness={slabThickness}
@@ -1261,9 +1447,9 @@ function MPRViewer() {
         onDeleteSelected={handleDeleteSelected}
         seriesCount={seriesList.length}
         showSeriesPanel={showSeriesPanel}
-        onToggleSeriesPanel={() => setShowSeriesPanel(!showSeriesPanel)}
+        onToggleSeriesPanel={handleToggleSeriesPanel}
         showAnnotationsPanel={showAnnotationsPanel}
-        onToggleAnnotationsPanel={() => setShowAnnotationsPanel(!showAnnotationsPanel)}
+        onToggleAnnotationsPanel={handleToggleAnnotationsPanel}
         hasVolume={!!volume}
       />
 
@@ -1278,9 +1464,9 @@ function MPRViewer() {
                 seriesList={seriesList}
                 currentSeriesUID={currentSeriesUID}
                 onLoadSeries={handleLoadSeries}
-                onClose={() => setShowSeriesPanel(false)}
+                onClose={handleCloseSeriesPanel}
                 isCollapsed={isSeriesPanelCollapsed}
-                onToggleCollapse={() => setIsSeriesPanelCollapsed(!isSeriesPanelCollapsed)}
+                onToggleCollapse={handleToggleSeriesPanelCollapse}
               />
             )}
 
@@ -1288,10 +1474,10 @@ function MPRViewer() {
             {showAnnotationsPanel && (
               <AnnotationsPanel
                 renderingEngine={renderingEngine}
-                viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
-                onClose={() => setShowAnnotationsPanel(false)}
+                viewportIds={viewportIds}
+                onClose={handleCloseAnnotationsPanel}
                 isCollapsed={isAnnotationsPanelCollapsed}
-                onToggleCollapse={() => setIsAnnotationsPanelCollapsed(!isAnnotationsPanelCollapsed)}
+                onToggleCollapse={handleToggleAnnotationsPanelCollapse}
                 panelPosition="left"
                 onPanelPositionChange={handleAnnotationsPanelPositionChange}
               />
@@ -1305,9 +1491,9 @@ function MPRViewer() {
             seriesList={seriesList}
             currentSeriesUID={currentSeriesUID}
             onLoadSeries={handleLoadSeries}
-            onClose={() => setShowSeriesPanel(false)}
+            onClose={handleCloseSeriesPanel}
             isCollapsed={isSeriesPanelCollapsed}
-            onToggleCollapse={() => setIsSeriesPanelCollapsed(!isSeriesPanelCollapsed)}
+            onToggleCollapse={handleToggleSeriesPanelCollapse}
           />
         )}
 
@@ -1320,8 +1506,19 @@ function MPRViewer() {
             </div>
           )}
 
-          <div ref={viewportsGridRef} className="mpr-viewports">
-            <div className="viewport-container">
+          <div
+            ref={viewportsGridRef}
+            className="mpr-viewports"
+            style={{
+              gridTemplateColumns: getGridTemplateColumns(currentLayout),
+              gridTemplateRows: getGridTemplateRows(currentLayout),
+            }}
+          >
+            {/* 静态初始结构 - 固定的三个视口用于初始加载和简单布局 */}
+            <div
+              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}`}
+              onClick={() => handleViewportClick('AXIAL')}
+            >
               <div className="viewport-label">Axial</div>
               <div
                 ref={axialRef}
@@ -1334,17 +1531,21 @@ function MPRViewer() {
                 onOrientationChange={handleOrientationChange}
                 orientationEnabled={!!volume}
                 imageIds={imageIds}
-                currentImageIndex={currentImageIndices.AXIAL}
+                currentImageIndex={currentImageIndices.AXIAL || 0}
                 totalSlices={getTotalSlices('AXIAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
-                windowCenter={windowLevels.AXIAL.center}
-                windowWidth={windowLevels.AXIAL.width}
+                windowCenter={windowLevels.AXIAL?.center || 40}
+                windowWidth={windowLevels.AXIAL?.width || 400}
+                isActive={activeViewportId === 'AXIAL'}
               />
             </div>
 
-            <div className="viewport-container">
+            <div
+              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}`}
+              onClick={() => handleViewportClick('SAGITTAL')}
+            >
               <div className="viewport-label">Sagittal</div>
               <div
                 ref={sagittalRef}
@@ -1357,17 +1558,21 @@ function MPRViewer() {
                 onOrientationChange={handleOrientationChange}
                 orientationEnabled={!!volume}
                 imageIds={imageIds}
-                currentImageIndex={currentImageIndices.SAGITTAL}
+                currentImageIndex={currentImageIndices.SAGITTAL || 0}
                 totalSlices={getTotalSlices('SAGITTAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
-                windowCenter={windowLevels.SAGITTAL.center}
-                windowWidth={windowLevels.SAGITTAL.width}
+                windowCenter={windowLevels.SAGITTAL?.center || 40}
+                windowWidth={windowLevels.SAGITTAL?.width || 400}
+                isActive={activeViewportId === 'SAGITTAL'}
               />
             </div>
 
-            <div className="viewport-container">
+            <div
+              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}`}
+              onClick={() => handleViewportClick('CORONAL')}
+            >
               <div className="viewport-label">Coronal</div>
               <div
                 ref={coronalRef}
@@ -1380,13 +1585,14 @@ function MPRViewer() {
                 onOrientationChange={handleOrientationChange}
                 orientationEnabled={!!volume}
                 imageIds={imageIds}
-                currentImageIndex={currentImageIndices.CORONAL}
+                currentImageIndex={currentImageIndices.CORONAL || 0}
                 totalSlices={getTotalSlices('CORONAL')}
                 seriesDescription={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.seriesDescription}
                 modality={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.modality}
                 patientName={seriesList.find(s => s.seriesInstanceUID === currentSeriesUID)?.patientName}
-                windowCenter={windowLevels.CORONAL.center}
-                windowWidth={windowLevels.CORONAL.width}
+                windowCenter={windowLevels.CORONAL?.center || 40}
+                windowWidth={windowLevels.CORONAL?.width || 400}
+                isActive={activeViewportId === 'CORONAL'}
               />
             </div>
           </div>
@@ -1403,10 +1609,10 @@ function MPRViewer() {
         {annotationsPanelPosition === 'right' && showAnnotationsPanel && (
           <AnnotationsPanel
             renderingEngine={renderingEngine}
-            viewportIds={['AXIAL', 'SAGITTAL', 'CORONAL']}
-            onClose={() => setShowAnnotationsPanel(false)}
+            viewportIds={viewportIds}
+            onClose={handleCloseAnnotationsPanel}
             isCollapsed={isAnnotationsPanelCollapsed}
-            onToggleCollapse={() => setIsAnnotationsPanelCollapsed(!isAnnotationsPanelCollapsed)}
+            onToggleCollapse={handleToggleAnnotationsPanelCollapse}
             panelPosition="right"
             onPanelPositionChange={handleAnnotationsPanelPositionChange}
           />

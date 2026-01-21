@@ -68,8 +68,7 @@ code {
 .mpr-viewports {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  /* grid-template-columns 和 grid-template-rows 现在通过内联样式动态设置 */
   gap: 2px;
   background-color: #000;
   padding: 2px;
@@ -128,10 +127,34 @@ code {
   background-color: #000;
   border: 1px solid #333;
   overflow: hidden;
-  /* 确保容器有明确的尺寸 */
-  min-height: 300px;
+  /* 让网格布局自动决定尺寸，移除固定最小高度 */
+  min-height: 0;
   width: 100%;
   height: 100%;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+/* 激活视口样式 */
+.viewport-container.active {
+  border: 2px solid #007acc;
+  box-shadow:
+    0 0 8px rgba(0, 122, 204, 0.6),
+    inset 0 0 20px rgba(0, 122, 204, 0.1);
+  z-index: 10;
+}
+
+/* 激活视口 - 悬停效果 */
+.viewport-container.active:hover {
+  border-color: #00d084;
+  box-shadow:
+    0 0 12px rgba(0, 208, 132, 0.6),
+    inset 0 0 20px rgba(0, 208, 132, 0.1);
+}
+
+/* 非激活视口 - 悬停效果 */
+.viewport-container:hover {
+  border-color: #555;
 }
 
 .viewport-label {
@@ -141,10 +164,9 @@ code {
 .viewport-element {
   width: 100%;
   height: 100%;
-  min-height: 200px;
+  min-height: 0;
   position: relative;
   /* 确保视口有明确的尺寸,避免渲染问题 */
-  flex: 1;
   display: block;
 }
 
