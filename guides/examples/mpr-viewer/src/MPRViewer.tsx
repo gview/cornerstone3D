@@ -1134,8 +1134,12 @@ function MPRViewer() {
       setIsMaximized(false);
       setMaximizedViewportId(null);
 
-      // 等待 DOM 更新后重置所有视口
+      // 等待 DOM 更新后重置所有视口并强制渲染
       setTimeout(() => {
+        // 首先调用 resize 让渲染引擎重新计算所有视口
+        renderingEngine!.resize(true, true);
+
+        // 然后重置所有视口的相机
         viewportIds.forEach((vpId) => {
           try {
             const viewport = renderingEngine!.getViewport(vpId) as Types.IVolumeViewport;
@@ -1147,13 +1151,14 @@ function MPRViewer() {
           }
         });
 
-        if (renderingEngine) {
-          renderingEngine.resize(true, true);
-          renderingEngine.renderViewports(viewportIds);
-        }
+        // 再次 resize 确保视口大小正确
+        renderingEngine!.resize(true, true);
+
+        // 渲染所有视口
+        renderingEngine!.renderViewports(viewportIds);
 
         console.log(`✅ 已还原到布局: ${layoutBeforeMaximize}`);
-      }, 150);
+      }, 200);
     } else if (!isMaximized) {
       // 没有视口被放大，放大当前视口
       console.log(`🔍 放大视口: ${viewportId}`);
@@ -1168,6 +1173,10 @@ function MPRViewer() {
 
       // 等待 DOM 更新后重置放大视口
       setTimeout(() => {
+        // 先调用 resize
+        renderingEngine!.resize(true, true);
+
+        // 重置相机以适应新的单视口布局
         try {
           const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
           if (viewport) {
@@ -1177,13 +1186,14 @@ function MPRViewer() {
           console.warn(`⚠️ 重置视口 ${viewportId} 失败:`, error);
         }
 
-        if (renderingEngine) {
-          renderingEngine.resize(true, true);
-          renderingEngine.renderViewports([viewportId]);
-        }
+        // 再次 resize 确保视口大小正确
+        renderingEngine!.resize(true, true);
+
+        // 只渲染放大的视口
+        renderingEngine!.renderViewports([viewportId]);
 
         console.log(`✅ 视口 ${viewportId} 已放大`);
-      }, 150);
+      }, 200);
     }
   };
 

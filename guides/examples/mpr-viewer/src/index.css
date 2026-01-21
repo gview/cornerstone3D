@@ -153,6 +153,16 @@ code {
   z-index: 20;
 }
 
+/* 隐藏的视口容器（放大模式下其他视口） */
+.viewport-container[style*="display: none"] {
+  position: absolute !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* 激活视口 - 悬停效果 */
 .viewport-container.active:hover {
   border-color: #00d084;
