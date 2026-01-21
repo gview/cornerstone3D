@@ -119,19 +119,23 @@ const handleViewportDoubleClick = (viewportId: string) => {
 
 每个视口容器添加了：
 - **双击事件处理器**: `onDoubleClick={() => handleViewportDoubleClick(viewportId)}`
-- **显示控制**: 通过 `style={{ display: isMaximized && maximizedViewportId !== viewportId ? 'none' : 'block' }}` 控制其他视口的显示/隐藏
+- **显示控制**: 通过 CSS 类 `viewport-container-hidden` 控制其他视口的显示/隐藏（避免 `display: none` 导致的尺寸错误）
 - **放大样式**: 添加 `maximized` CSS 类来标识放大状态
 
 ```typescript
 <div
-  className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}`}
-  style={{ display: isMaximized && maximizedViewportId !== 'AXIAL' ? 'none' : 'block' }}
+  className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'AXIAL' ? ' viewport-container-hidden' : ''}`}
   onClick={() => handleViewportClick('AXIAL')}
   onDoubleClick={() => handleViewportDoubleClick('AXIAL')}
 >
   {/* 视口内容 */}
 </div>
 ```
+
+**重要说明**: 使用 `viewport-container-hidden` CSS 类而不是 `display: none` 来隐藏视口，这是因为：
+- `display: none` 会导致视口尺寸变为 0×0，触发 Cornerstone3D 的 "Viewport is too small" 错误
+- 使用 `position: fixed; left: -9999px` 将视口移出屏幕，保持有效尺寸
+- 避免了 `ScaleOverlayTool` 计算 NaN 值的问题
 
 ### CSS 样式
 
@@ -143,6 +147,15 @@ const handleViewportDoubleClick = (viewportId: string) => {
     0 0 16px rgba(0, 208, 132, 0.8),
     inset 0 0 30px rgba(0, 208, 132, 0.15);
   z-index: 20;
+}
+
+/* 放大模式下隐藏其他视口 - 使用绝对定位移出视口 */
+.viewport-container-hidden {
+  position: fixed !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 ```
 

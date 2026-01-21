@@ -1189,8 +1189,9 @@ function MPRViewer() {
         // 再次 resize 确保视口大小正确
         renderingEngine!.resize(true, true);
 
-        // 只渲染放大的视口
-        renderingEngine!.renderViewports([viewportId]);
+        // 渲染所有视口（隐藏的视口不会被实际渲染）
+        // 这比只渲染一个视口更安全，避免其他视口状态丢失
+        renderingEngine!.renderViewports(viewportIds);
 
         console.log(`✅ 视口 ${viewportId} 已放大`);
       }, 300);
@@ -1597,8 +1598,7 @@ function MPRViewer() {
           >
             {/* 静态初始结构 - 固定的三个视口用于初始加载和简单布局 */}
             <div
-              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}`}
-              style={{ display: isMaximized && maximizedViewportId !== 'AXIAL' ? 'none' : 'block' }}
+              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'AXIAL' ? ' viewport-container-hidden' : ''}`}
               onClick={() => handleViewportClick('AXIAL')}
               onDoubleClick={() => handleViewportDoubleClick('AXIAL')}
             >
@@ -1626,8 +1626,7 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'SAGITTAL' ? ' maximized' : ''}`}
-              style={{ display: isMaximized && maximizedViewportId !== 'SAGITTAL' ? 'none' : 'block' }}
+              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'SAGITTAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'SAGITTAL' ? ' viewport-container-hidden' : ''}`}
               onClick={() => handleViewportClick('SAGITTAL')}
               onDoubleClick={() => handleViewportDoubleClick('SAGITTAL')}
             >
@@ -1655,8 +1654,7 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'CORONAL' ? ' maximized' : ''}`}
-              style={{ display: isMaximized && maximizedViewportId !== 'CORONAL' ? 'none' : 'block' }}
+              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'CORONAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'CORONAL' ? ' viewport-container-hidden' : ''}`}
               onClick={() => handleViewportClick('CORONAL')}
               onDoubleClick={() => handleViewportDoubleClick('CORONAL')}
             >
