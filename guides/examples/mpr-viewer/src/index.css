@@ -144,6 +144,15 @@ code {
   z-index: 10;
 }
 
+/* 放大视口样式 */
+.viewport-container.maximized {
+  border: 3px solid #00d084;
+  box-shadow:
+    0 0 16px rgba(0, 208, 132, 0.8),
+    inset 0 0 30px rgba(0, 208, 132, 0.15);
+  z-index: 20;
+}
+
 /* 激活视口 - 悬停效果 */
 .viewport-container.active:hover {
   border-color: #00d084;

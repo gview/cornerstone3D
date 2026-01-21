@@ -92,6 +92,11 @@ function MPRViewer() {
   // 激活视口状态
   const [activeViewportId, setActiveViewportId] = useState<string>('AXIAL');
 
+  // 放大模式状态
+  const [isMaximized, setIsMaximized] = useState<boolean>(false);
+  const [maximizedViewportId, setMaximizedViewportId] = useState<string | null>(null);
+  const [layoutBeforeMaximize, setLayoutBeforeMaximize] = useState<ViewportLayout>('grid-1x3');
+
   // 当前图像索引状态（用于每个视口）
   const [currentImageIndices, setCurrentImageIndices] = useState<Record<string, number>>({
     AXIAL: 0,
@@ -1116,6 +1121,72 @@ function MPRViewer() {
     console.log(`✅ 激活视口: ${viewportId}`);
   };
 
+  // 处理视口双击 - 放大/还原
+  const handleViewportDoubleClick = (viewportId: string) => {
+    if (!renderingEngine) return;
+
+    if (isMaximized && maximizedViewportId === viewportId) {
+      // 当前视口已放大，还原到原始布局
+      console.log(`🔄 还原视口: ${viewportId}`);
+
+      // 恢复原始布局
+      setCurrentLayout(layoutBeforeMaximize);
+      setIsMaximized(false);
+      setMaximizedViewportId(null);
+
+      // 等待 DOM 更新后重置所有视口
+      setTimeout(() => {
+        viewportIds.forEach((vpId) => {
+          try {
+            const viewport = renderingEngine!.getViewport(vpId) as Types.IVolumeViewport;
+            if (viewport) {
+              viewport.resetCamera();
+            }
+          } catch (error) {
+            console.warn(`⚠️ 重置视口 ${vpId} 失败:`, error);
+          }
+        });
+
+        if (renderingEngine) {
+          renderingEngine.resize(true, true);
+          renderingEngine.renderViewports(viewportIds);
+        }
+
+        console.log(`✅ 已还原到布局: ${layoutBeforeMaximize}`);
+      }, 150);
+    } else if (!isMaximized) {
+      // 没有视口被放大，放大当前视口
+      console.log(`🔍 放大视口: ${viewportId}`);
+
+      // 保存当前布局
+      setLayoutBeforeMaximize(currentLayout);
+      setIsMaximized(true);
+      setMaximizedViewportId(viewportId);
+
+      // 切换到单视口布局
+      setCurrentLayout('grid-1x1');
+
+      // 等待 DOM 更新后重置放大视口
+      setTimeout(() => {
+        try {
+          const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
+          if (viewport) {
+            viewport.resetCamera();
+          }
+        } catch (error) {
+          console.warn(`⚠️ 重置视口 ${viewportId} 失败:`, error);
+        }
+
+        if (renderingEngine) {
+          renderingEngine.resize(true, true);
+          renderingEngine.renderViewports([viewportId]);
+        }
+
+        console.log(`✅ 视口 ${viewportId} 已放大`);
+      }, 150);
+    }
+  };
+
   // 处理删除选中的测量
   const handleDeleteSelected = () => {
     try {
@@ -1516,8 +1587,10 @@ function MPRViewer() {
           >
             {/* 静态初始结构 - 固定的三个视口用于初始加载和简单布局 */}
             <div
-              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}`}
+              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}`}
+              style={{ display: isMaximized && maximizedViewportId !== 'AXIAL' ? 'none' : 'block' }}
               onClick={() => handleViewportClick('AXIAL')}
+              onDoubleClick={() => handleViewportDoubleClick('AXIAL')}
             >
               <div className="viewport-label">Axial</div>
               <div
@@ -1543,8 +1616,10 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}`}
+              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'SAGITTAL' ? ' maximized' : ''}`}
+              style={{ display: isMaximized && maximizedViewportId !== 'SAGITTAL' ? 'none' : 'block' }}
               onClick={() => handleViewportClick('SAGITTAL')}
+              onDoubleClick={() => handleViewportDoubleClick('SAGITTAL')}
             >
               <div className="viewport-label">Sagittal</div>
               <div
@@ -1570,8 +1645,10 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}`}
+              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'CORONAL' ? ' maximized' : ''}`}
+              style={{ display: isMaximized && maximizedViewportId !== 'CORONAL' ? 'none' : 'block' }}
               onClick={() => handleViewportClick('CORONAL')}
+              onDoubleClick={() => handleViewportDoubleClick('CORONAL')}
             >
               <div className="viewport-label">Coronal</div>
               <div
