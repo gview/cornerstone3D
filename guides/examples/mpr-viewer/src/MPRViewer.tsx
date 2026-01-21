@@ -1158,7 +1158,7 @@ function MPRViewer() {
         renderingEngine!.renderViewports(viewportIds);
 
         console.log(`✅ 已还原到布局: ${layoutBeforeMaximize}`);
-      }, 200);
+      }, 300);
     } else if (!isMaximized) {
       // 没有视口被放大，放大当前视口
       console.log(`🔍 放大视口: ${viewportId}`);
@@ -1193,7 +1193,7 @@ function MPRViewer() {
         renderingEngine!.renderViewports([viewportId]);
 
         console.log(`✅ 视口 ${viewportId} 已放大`);
-      }, 200);
+      }, 300);
     }
   };
 
