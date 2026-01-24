@@ -262,6 +262,8 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
           flex-direction: column;
           transition: width 0.3s ease;
           flex-shrink: 0;
+          height: 100%;
+          overflow: hidden;
         }
 
         .series-sidebar.expanded {
@@ -321,6 +323,7 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
           flex: 1;
           overflow-y: auto;
           padding: 4px;
+          min-height: 0;
         }
 
         .series-sidebar.collapsed .series-list {
