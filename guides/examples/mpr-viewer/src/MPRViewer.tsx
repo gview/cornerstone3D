@@ -56,6 +56,18 @@ const getGridTemplateRows = (layout: ViewportLayout): string => {
   return '1fr 1fr'; // 默认 2 行
 };
 
+// 辅助函数：根据布局类型计算视口数量
+const getViewportCountFromLayout = (layout: ViewportLayout): number => {
+  const match = layout.match(/grid-(\d+)x(\d+)/);
+  if (match) {
+    const rows = parseInt(match[1]);
+    const cols = parseInt(match[2]);
+    return rows * cols;
+  }
+  // 对于协议布局，返回默认值（根据需要调整）
+  return 3; // 默认 MPR 三视图
+};
+
 // MPR 查看器主组件
 function MPRViewer() {
   const axialRef = useRef<HTMLDivElement>(null);
@@ -1409,6 +1421,40 @@ function MPRViewer() {
       return;
     }
 
+    // 计算新布局的视口数量
+    const newViewportCount = getViewportCountFromLayout(layout);
+
+    // 如果新布局视口数量小于3，且当前十字线处于激活状态，则需要禁用十字线
+    if (newViewportCount < 3 && showCrosshairs) {
+      console.log('⚠️ 布局切换到少于3个视口模式，先激活窗宽窗位，再禁用十字线工具');
+
+      // 获取工具组
+      const toolGroupId = 'mpr';
+      const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+      if (toolGroup) {
+        // 1. 先激活窗宽窗位工具
+        toolGroup.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        setIsWindowLevelActive(true);
+        console.log('✅ 已激活窗宽窗位工具');
+
+        // 2. 将当前测量工具设为 Passive（可见但不可编辑）
+        if (activeTool && toolGroup.hasTool(activeTool)) {
+          toolGroup.setToolPassive(activeTool);
+        }
+
+        // 3. 然后禁用十字线工具
+        toolGroup.setToolDisabled(CrosshairsTool.toolName);
+        setShowCrosshairs(false);
+        console.log('✅ 已禁用十字线工具');
+      } else {
+        // 如果无法获取工具组，至少更新状态
+        setShowCrosshairs(false);
+      }
+    }
+
     // 简化版本：只更新布局状态，让CSS样式自动调整
     // 注意：当前实现只支持3视口布局（grid-1x3, grid-3x1），其他布局可能显示不正确
     setCurrentLayout(layout);
@@ -1607,7 +1653,7 @@ function MPRViewer() {
         onToolModeChange={handleToolModeChange}
         onToggleCrosshairs={handleToggleCrosshairs}
         showCrosshairs={showCrosshairs}
-        viewportCount={viewportIds.length}
+        viewportCount={getViewportCountFromLayout(currentLayout)}
         onToggleWindowLevel={handleToggleWindowLevel}
         isWindowLevelActive={isWindowLevelActive}
         onRotate={handleRotate}

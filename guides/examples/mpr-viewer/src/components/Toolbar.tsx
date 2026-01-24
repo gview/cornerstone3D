@@ -220,7 +220,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           onClick={onToggleCrosshairs}
           tooltip={showCrosshairs ? '隐藏十字线' : '显示十字线'}
           active={showCrosshairs}
-          disabled={!hasVolume || viewportCount <= 1}
+          disabled={!hasVolume || viewportCount < 3}
         />
         <IconButton
           icon="🎨"
