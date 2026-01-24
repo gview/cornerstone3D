@@ -10,6 +10,7 @@ export type ViewportLayout =
   | 'grid-3x2'
   | 'grid-2x3'
   | 'grid-3x3'
+  | 'grid-1-2'
   | 'mpr'
   | 'advanced'
   | '3d-four-up'
@@ -53,6 +54,7 @@ const gridLayouts: GridLayoutOption[] = [
   { id: 'grid-2x2', name: '2×2 四视图', icon: '▦', rows: 2, cols: 2, category: 'Grid' },
   { id: 'grid-3x1', name: '3×1 纵向', icon: '▯', rows: 3, cols: 1, category: 'Grid' },
   { id: 'grid-1x3', name: '1×3 横向', icon: '▭', rows: 1, cols: 3, category: 'Grid' },
+  { id: 'grid-1-2', name: '1|2 主副视图', icon: '▰', rows: 2, cols: 2, category: 'Grid' },
   { id: 'grid-3x2', name: '3×2 六视图', icon: '▲', rows: 3, cols: 2, category: 'Grid' },
   { id: 'grid-2x3', name: '2×3 六视图', icon: '▶', rows: 2, cols: 3, category: 'Grid' },
   { id: 'grid-3x3', name: '3×3 九视图', icon: '▣', rows: 3, cols: 3, category: 'Grid' },

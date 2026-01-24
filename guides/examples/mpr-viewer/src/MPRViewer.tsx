@@ -43,6 +43,10 @@ const getGridTemplateColumns = (layout: ViewportLayout): string => {
     const cols = parseInt(match[2]);  // 第二个数字是列数
     return Array(cols).fill('1fr').join(' ');
   }
+  // 特殊布局：grid-1-2 (左边大视口，右边上下两个小视口)
+  if (layout === 'grid-1-2') {
+    return '2fr 1fr'; // 左侧占 2/3，右侧占 1/3
+  }
   return '1fr 1fr'; // 默认 2 列
 };
 
@@ -52,6 +56,10 @@ const getGridTemplateRows = (layout: ViewportLayout): string => {
   if (match) {
     const rows = parseInt(match[1]);  // 第一个数字是行数
     return Array(rows).fill('1fr').join(' ');
+  }
+  // 特殊布局：grid-1-2 (左边大视口，右边上下两个小视口)
+  if (layout === 'grid-1-2') {
+    return '1fr 1fr'; // 右侧分为上下两行
   }
   return '1fr 1fr'; // 默认 2 行
 };
@@ -63,6 +71,10 @@ const getViewportCountFromLayout = (layout: ViewportLayout): number => {
     const rows = parseInt(match[1]);
     const cols = parseInt(match[2]);
     return rows * cols;
+  }
+  // 特殊布局：grid-1-2 (3个视口)
+  if (layout === 'grid-1-2') {
+    return 3;
   }
   // 对于协议布局，返回默认值（根据需要调整）
   return 3; // 默认 MPR 三视图
@@ -1734,13 +1746,15 @@ function MPRViewer() {
             style={{
               gridTemplateColumns: getGridTemplateColumns(currentLayout),
               gridTemplateRows: getGridTemplateRows(currentLayout),
+              gridTemplateAreas: currentLayout === 'grid-1-2' ? '"main top" "main bottom"' : undefined,
             }}
           >
             {/* 静态初始结构 - 固定的三个视口用于初始加载和简单布局 */}
             <div
-              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'AXIAL' ? ' viewport-container-hidden' : ''}`}
+              className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'AXIAL' ? ' viewport-container-hidden' : ''}${currentLayout === 'grid-1-2' ? ' grid-1-2-main' : ''}`}
               onClick={() => handleViewportClick('AXIAL')}
               onDoubleClick={() => handleViewportDoubleClick('AXIAL')}
+              style={currentLayout === 'grid-1-2' ? { gridArea: 'main' } : undefined}
             >
               <div className="viewport-label">Axial</div>
               <div
@@ -1766,9 +1780,10 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'SAGITTAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'SAGITTAL' ? ' viewport-container-hidden' : ''}`}
+              className={`viewport-container${activeViewportId === 'SAGITTAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'SAGITTAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'SAGITTAL' ? ' viewport-container-hidden' : ''}${currentLayout === 'grid-1-2' ? ' grid-1-2-top' : ''}`}
               onClick={() => handleViewportClick('SAGITTAL')}
               onDoubleClick={() => handleViewportDoubleClick('SAGITTAL')}
+              style={currentLayout === 'grid-1-2' ? { gridArea: 'top' } : undefined}
             >
               <div className="viewport-label">Sagittal</div>
               <div
@@ -1794,9 +1809,10 @@ function MPRViewer() {
             </div>
 
             <div
-              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'CORONAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'CORONAL' ? ' viewport-container-hidden' : ''}`}
+              className={`viewport-container${activeViewportId === 'CORONAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'CORONAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'CORONAL' ? ' viewport-container-hidden' : ''}${currentLayout === 'grid-1-2' ? ' grid-1-2-bottom' : ''}`}
               onClick={() => handleViewportClick('CORONAL')}
               onDoubleClick={() => handleViewportDoubleClick('CORONAL')}
+              style={currentLayout === 'grid-1-2' ? { gridArea: 'bottom' } : undefined}
             >
               <div className="viewport-label">Coronal</div>
               <div
