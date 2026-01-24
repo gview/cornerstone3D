@@ -2,10 +2,11 @@
 
 ## 概述
 
-本文档详细说明了双序列 MPR（Multi-Planar Reconstruction）布局的完整实现，包括两个独立序列的同时显示、测量智能跳转、十字线独立联动等核心功能。
+本文档详细说明了双序列 MPR（Multi-Planar Reconstruction）布局的完整实现，包括两个独立序列的同时显示、测量智能跳转、十字线独立联动、视口激活状态等核心功能。
 
-**版本**: 1.0
+**版本**: 1.2
 **实现日期**: 2026-01-24
+**更新日期**: 2026-01-24
 **状态**: ✅ 已完成并通过测试
 
 ---
@@ -35,7 +36,17 @@
 - **序列间独立**: 两个序列的十字线互不干扰
 - **同步控制**: 工具栏按钮同时控制两个序列
 
-### 4. 完整工具支持
+### 4. 视口激活状态显示 ✨ 新增
+
+- **蓝色边框**: 激活的视口显示蓝色边框（2px solid #007acc）
+- **点击切换**: 点击任意视口即可切换激活状态
+- **视觉反馈**:
+  - 激活视口：蓝色边框 + 蓝色阴影
+  - 激活视口悬停：绿色边框
+  - 非激活视口悬停：灰色边框
+- **自动初始化**: 切换到双序列布局时，第一个视口自动激活
+
+### 5. 完整工具支持
 
 - ✅ 平移（中键拖动）
 - ✅ 缩放（右键拖动）
@@ -43,6 +54,16 @@
 - ✅ 十字线（左键拖动）
 - ✅ 窗宽窗位（左键拖动）
 - ✅ 测量工具（长度、角度、矩形、椭圆等）
+
+### 6. 双序列独立切换 ✨ 新增
+
+- **智能检测**: 自动检测当前是否为双序列 MPR 布局
+- **激活视口识别**: 根据激活视口确定要更新哪个序列
+- **独立加载**: 双击序列时只更新激活视口所属的序列行
+  - 点击序列 1 的视口 → 更新上排三个视口
+  - 点击序列 2 的视口 → 更新下排三个视口
+- **窗宽窗位同步**: 自动应用新序列的窗宽窗位设置
+- **状态更新**: 正确更新 `volumeId` 和 `secondaryVolumeId` 状态
 
 ---
 
@@ -553,6 +574,223 @@ const handleToolChange = (toolName: string) => {
 
 **文档**: [ANNOTATION_PANEL_DUAL_SEQUENCE_FIX.md](ANNOTATION_PANEL_DUAL_SEQUENCE_FIX.md)
 
+### 修复 6: 视口激活状态不显示 ✨ 新增
+
+**问题**: 切换到双序列MPR后，点击视口没有激活状态显示（蓝色边框）
+
+**原因**:
+1. `handleViewportClick` 函数在闭包中捕获了旧的 `viewportIds` 状态值（3个）
+2. 事件监听器在布局切换时没有更新，仍然使用旧的闭包
+3. 条件判断 `viewportIds.length === 6 && secondaryVolumeId` 中的 `viewportIds` 为旧值
+
+**解决方案**:
+
+#### 1. 在视口创建时添加 active 类
+
+**文件**: [dynamicViewportManager.ts:180-185](src/utils/dynamicViewportManager.ts:180-185)
+
+```typescript
+// 🔧 检查是否是激活的视口并添加 active 类
+const activeViewportId = this.eventHandlers.getActiveViewportId?.();
+const isActive = viewportId === activeViewportId;
+if (isActive) {
+  viewportContainer.classList.add('active');
+}
+```
+
+#### 2. 添加动态更新方法
+
+**文件**: [dynamicViewportManager.ts:131-151](src/utils/dynamicViewportManager.ts:131-151)
+
+```typescript
+/**
+ * 更新视口激活状态
+ * @param activeViewportId 激活的视口ID
+ */
+updateActiveViewport(activeViewportId: string): void {
+  if (!this.containerElement) return;
+
+  // 获取所有视口容器
+  const viewportContainers = Array.from(this.containerElement.children).filter(
+    child => child.classList.contains('viewport-container')
+  );
+
+  viewportContainers.forEach((container) => {
+    // 查找该容器对应的视口元素
+    const viewportElement = container.querySelector('.viewport-element');
+    if (viewportElement) {
+      const viewportId = viewportElement.id;
+      if (viewportId === activeViewportId) {
+        container.classList.add('active');
+      } else {
+        container.classList.remove('active');
+      }
+    }
+  });
+}
+```
+
+#### 3. 在点击事件中调用更新方法
+
+**文件**: [MPRViewer.tsx:1507-1514](src/MPRViewer.tsx:1507-1514)
+
+```typescript
+// 处理视口激活
+const handleViewportClick = (viewportId: string) => {
+  setActiveViewportId(viewportId);
+
+  // 🔧 更新视口容器的active类（支持单序列和双序列布局）
+  // 不依赖状态值，直接调用 updateActiveViewport，让方法内部判断
+  dynamicViewportManager.updateActiveViewport(viewportId);
+
+  console.log(`✅ 激活视口: ${viewportId}`);
+};
+```
+
+#### 4. 初始化时设置第一个视口为激活状态
+
+**文件**: [MPRViewer.tsx:1955-1959](src/MPRViewer.tsx:1955-1959)
+
+```typescript
+// 🔧 设置第一个视口为激活状态
+const firstViewportId = newViewportIds[0];
+setActiveViewportId(firstViewportId);
+dynamicViewportManager.updateActiveViewport(firstViewportId);
+console.log(`✅ 设置视口 ${firstViewportId} 为激活状态`);
+```
+
+**关键点**:
+- 不依赖 `viewportIds.length` 等状态值来判断是否为双序列布局
+- `updateActiveViewport` 内部通过查询实际的 DOM 结构来工作
+- 支持单序列和双序列布局，兼容性好
+
+### 修复 7: 双序列切换失败 ✨ 新增
+
+**问题**: 在双序列 MPR 布局下，双击序列面板中的序列时，所有 6 个视口都被更新为同一个序列
+
+**原因**:
+- `handleLoadSeries` 函数没有考虑双序列布局的特殊情况
+- 函数总是更新所有视口（`['AXIAL', 'SAGITTAL', 'CORONAL']`）
+- 没有根据激活视口判断要更新哪个序列
+
+**解决方案**:
+
+#### 1. 添加双序列布局检测
+
+**文件**: [MPRViewer.tsx:873-876](src/MPRViewer.tsx:873-876)
+
+```typescript
+// 🔧 检测是否是双序列 MPR 布局
+const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
+
+if (isDualSequenceLayout) {
+  // 双序列布局的特殊处理逻辑
+}
+```
+
+#### 2. 确定目标序列和视口
+
+**文件**: [MPRViewer.tsx:885-897](src/MPRViewer.tsx:885-897)
+
+```typescript
+// 确定激活视口属于哪个序列（0-2: 序列1, 3-5: 序列2）
+const activeViewportIndex = viewportIds.indexOf(activeViewportId);
+if (activeViewportIndex === -1) {
+  console.error(`❌ 激活视口 ${activeViewportId} 不在视口列表中`);
+  setIsLoading(false);
+  return;
+}
+
+const sequenceIndex = activeViewportIndex < 3 ? 1 : 2;
+const targetViewports = activeViewportIndex < 3 ? viewportIds.slice(0, 3) : viewportIds.slice(3, 6);
+
+console.log(`  激活视口属于序列 ${sequenceIndex}`);
+console.log(`  目标视口组:`, targetViewports);
+```
+
+#### 3. 只更新目标序列的视口
+
+**文件**: [MPRViewer.tsx:906-960](src/MPRViewer.tsx:906-960)
+
+```typescript
+// 创建新的 volume
+const newVolumeId = `volume-${seriesInfo.seriesInstanceUID}`;
+const newVolume = await volumeLoader.createAndCacheVolume(newVolumeId, {
+  imageIds: seriesInfo.imageIds,
+});
+newVolume.load();
+
+// 为目标序列的视口设置新的 volume
+await setVolumesForViewports(
+  renderingEngine,
+  [{ volumeId: newVolumeId }],
+  targetViewports  // 只更新目标序列的视口
+);
+
+// 从新序列获取窗宽窗位信息
+const voi = metaData.get('voiLutModule', seriesInfo.imageIds[0]);
+
+if (voi) {
+  const voiRange = utilities.windowLevel.toLowHighRange(
+    voi.windowWidth,
+    voi.windowCenter,
+    voi.voiLutFunction
+  );
+
+  // 为目标序列的每个视口设置窗宽窗位
+  targetViewports.forEach((viewportId) => {
+    try {
+      const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
+      if (viewport) {
+        viewport.setProperties({ voiRange });
+
+        // 更新 windowLevels state
+        const width = voiRange.upper - voiRange.lower;
+        const center = (voiRange.upper + voiRange.lower) / 2;
+        setWindowLevels((prev) => ({
+          ...prev,
+          [viewportId]: { center, width },
+        }));
+      }
+    } catch (error) {
+      console.warn(`设置视口 ${viewportId} 窗宽窗位失败:`, error);
+    }
+  });
+}
+
+// 更新对应的 volumeId state
+if (sequenceIndex === 1) {
+  setVolumeId(newVolumeId);
+  setImageIds(seriesInfo.imageIds);
+} else {
+  setSecondaryVolumeId(newVolumeId);
+}
+
+// 更新当前序列 UID
+setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
+
+// 重新渲染目标序列的视口
+renderingEngine.renderViewports(targetViewports);
+```
+
+#### 4. 更新依赖项
+
+**文件**: [MPRViewer.tsx:1079](src/MPRViewer.tsx:1079)
+
+```typescript
+}, [renderingEngine, viewportIds, secondaryVolumeId, activeViewportId]);
+```
+
+添加了新的依赖项：
+- `viewportIds`: 用于确定当前布局类型和视口索引
+- `secondaryVolumeId`: 用于检测双序列布局
+- `activeViewportId`: 用于确定要更新哪个序列
+
+**使用方法**:
+1. 在双序列 MPR 布局下，点击任意视口激活它
+2. 双击序列面板中的某个序列
+3. 该序列将被加载到激活视口所属的序列行（上排或下排）
+
 ---
 
 ## 测试验证
@@ -652,6 +890,49 @@ const handleToolChange = (toolName: string) => {
 - ✅ 两个序列的工具状态同步更新
 - ✅ 没有错误信息
 
+#### 用例 8: 视口激活状态 ✨ 新增
+
+**步骤**:
+1. 切换到双序列MPR布局
+2. 观察第一个视口是否有蓝色边框
+3. 点击不同的视口（包括序列1和序列2的视口）
+4. 观察激活状态是否正确切换
+
+**预期结果**:
+- ✅ 初始状态：第一个视口（序列1的Axial）显示蓝色边框
+- ✅ 点击任意视口：该视口显示蓝色边框
+- ✅ 其他视口：边框消失
+- ✅ 激活视口悬停：边框变为绿色
+- ✅ 非激活视口悬停：边框变为灰色
+- ✅ 控制台输出：`✅ 设置视口 xxx 为激活状态`
+- ✅ 控制台输出：`✅ 激活视口: xxx`
+
+#### 用例 9: 双序列独立切换 ✨ 新增
+
+**步骤**:
+1. 切换到双序列 MPR 布局
+2. 点击序列 1 的任意视口（上排）激活它
+3. 双击序列面板中的序列 A
+4. 观察上排三个视口是否显示序列 A
+5. 点击序列 2 的任意视口（下排）激活它
+6. 双击序列面板中的序列 B
+7. 观察下排三个视口是否显示序列 B
+
+**预期结果**:
+- ✅ 步骤 2：控制台输出：`✅ 激活视口: viewport-xxx-0`（序列 1 的视口）
+- ✅ 步骤 3：控制台输出：`🔄 双序列 MPR 布局：正在切换序列到激活视口`
+- ✅ 步骤 3：控制台输出：`  激活视口属于序列 1`
+- ✅ 步骤 3：控制台输出：`  目标视口组: [viewport-xxx-0, viewport-xxx-1, viewport-xxx-2]`
+- ✅ 步骤 4：上排三个视口显示序列 A 的 Axial、Sagittal、Coronal
+- ✅ 步骤 4：下排三个视口仍显示原始序列
+- ✅ 步骤 5：控制台输出：`✅ 激活视口: viewport-xxx-3`（序列 2 的视口）
+- ✅ 步骤 6：控制台输出：`  激活视口属于序列 2`
+- ✅ 步骤 6：控制台输出：`  目标视口组: [viewport-xxx-3, viewport-xxx-4, viewport-xxx-5]`
+- ✅ 步骤 7：下排三个视口显示序列 B 的 Axial、Sagittal、Coronal
+- ✅ 步骤 7：上排三个视口仍显示序列 A
+- ✅ 窗宽窗位正确应用
+- ✅ 控制台输出：`✅ 序列 1 已切换到: X` 或 `✅ 序列 2 已切换到: Y`
+
 ### 预期日志
 
 ```
@@ -680,6 +961,7 @@ const handleToolChange = (toolName: string) => {
   ✓ 序列2 长度测量工具已启用（左键，默认）
 ✅ 双序列 MPR 工具组配置完成（两个独立工具组）
 ✅ 已添加标注序列追踪监听器
+✅ 设置视口 viewport-xxx-0 为激活状态
 ✅ 双序列 MPR 布局已应用，共 6 个视口
 ```
 
@@ -735,6 +1017,39 @@ renderingEngine.renderViewports([
 ```
 
 这样可以提高性能，避免不必要的渲染。
+
+### 视口激活状态管理
+
+**CSS样式定义** ([index.css:139-176](src/index.css:139-176)):
+
+```css
+/* 激活视口样式 */
+.viewport-container.active {
+  border: 2px solid #007acc;
+  box-shadow:
+    0 0 8px rgba(0, 122, 204, 0.6),
+    inset 0 0 20px rgba(0, 122, 204, 0.1);
+  z-index: 10;
+}
+
+/* 激活视口 - 悬停效果 */
+.viewport-container.active:hover {
+  border-color: #00d084;
+  box-shadow:
+    0 0 12px rgba(0, 208, 132, 0.6),
+    inset 0 0 20px rgba(0, 208, 132, 0.1);
+}
+
+/* 非激活视口 - 悬停效果 */
+.viewport-container:hover {
+  border-color: #555;
+}
+```
+
+**关键实现**:
+1. 创建视口时检查并添加 `active` 类
+2. 点击视口时动态更新所有视口的 `active` 类
+3. 不依赖状态值，直接查询 DOM 结构更新样式
 
 ---
 
@@ -850,11 +1165,19 @@ if (ToolGroupManager.getToolGroup('mpr-seq1')) {
 3. **状态同步**: 确保两个序列的工具状态保持同步
 4. **智能跳转**: 通过事件监听器和自定义元数据实现序列识别
 5. **DOM 协调**: 正确处理 React 和手动 DOM 操作的时序
+6. **视口激活**: 通过 DOM 查询动态更新视口激活状态，避免闭包陷阱 ✨ 新增
+7. **序列切换**: 支持双序列布局下的独立序列切换，根据激活视口智能判断目标序列 ✨ 新增
 
-通过系统性地解决这些问题，我们实现了一个功能完整、性能良好的双序列 MPR 查看器。
+通过系统性地解决这些问题，我们实现了一个功能完整、性能良好的双序列 MPR 查看器。用户可以：
+
+- 同时对比两个不同序列的图像
+- 在序列之间独立切换，不影响另一个序列
+- 使用所有常用工具（平移、缩放、换层、十字线、窗宽窗位、测量）
+- 智能跳转到测量所属的序列
+- 直观地看到当前激活的视口
 
 ---
 
-**文档版本**: 1.0
+**文档版本**: 1.2
 **最后更新**: 2026-01-24
 **维护者**: Claude Code Assistant

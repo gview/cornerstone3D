@@ -870,6 +870,105 @@ function MPRViewer() {
       return;
     }
 
+    // 🔧 检测是否是双序列 MPR 布局
+    const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
+
+    if (isDualSequenceLayout) {
+      // 🔧 双序列 MPR 布局下的特殊处理
+      console.log(`🔄 双序列 MPR 布局：正在切换序列到激活视口`);
+      console.log(`  激活视口: ${activeViewportId}`);
+      console.log(`  目标序列: ${seriesInfo.seriesNumber} - ${seriesInfo.seriesDescription}`);
+
+      try {
+        setIsLoading(true);
+
+        // 确定激活视口属于哪个序列（0-2: 序列1, 3-5: 序列2）
+        const activeViewportIndex = viewportIds.indexOf(activeViewportId);
+        if (activeViewportIndex === -1) {
+          console.error(`❌ 激活视口 ${activeViewportId} 不在视口列表中`);
+          setIsLoading(false);
+          return;
+        }
+
+        const sequenceIndex = activeViewportIndex < 3 ? 1 : 2;
+        const targetViewports = activeViewportIndex < 3 ? viewportIds.slice(0, 3) : viewportIds.slice(3, 6);
+
+        console.log(`  激活视口属于序列 ${sequenceIndex}`);
+        console.log(`  目标视口组:`, targetViewports);
+
+        // 创建新的 volume
+        const newVolumeId = `volume-${seriesInfo.seriesInstanceUID}`;
+        const newVolume = await volumeLoader.createAndCacheVolume(newVolumeId, {
+          imageIds: seriesInfo.imageIds,
+        });
+        newVolume.load();
+
+        // 为目标序列的视口设置新的 volume
+        await setVolumesForViewports(
+          renderingEngine,
+          [{ volumeId: newVolumeId }],
+          targetViewports
+        );
+
+        // 从新序列获取窗宽窗位信息
+        const voi = metaData.get('voiLutModule', seriesInfo.imageIds[0]);
+
+        if (voi) {
+          const voiRange = utilities.windowLevel.toLowHighRange(
+            voi.windowWidth,
+            voi.windowCenter,
+            voi.voiLutFunction
+          );
+
+          // 为目标序列的每个视口设置窗宽窗位
+          targetViewports.forEach((viewportId) => {
+            try {
+              const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
+              if (viewport) {
+                viewport.setProperties({ voiRange });
+
+                // 更新 windowLevels state
+                const width = voiRange.upper - voiRange.lower;
+                const center = (voiRange.upper + voiRange.lower) / 2;
+                setWindowLevels((prev) => ({
+                  ...prev,
+                  [viewportId]: { center, width },
+                }));
+              }
+            } catch (error) {
+              console.warn(`设置视口 ${viewportId} 窗宽窗位失败:`, error);
+            }
+          });
+
+          console.log(`✅ 序列 ${sequenceIndex} 已应用新窗宽窗位: W=${voi.windowWidth} L=${voi.windowCenter}`);
+        }
+
+        // 更新对应的 volumeId state
+        if (sequenceIndex === 1) {
+          setVolumeId(newVolumeId);
+          setImageIds(seriesInfo.imageIds);
+        } else {
+          setSecondaryVolumeId(newVolumeId);
+        }
+
+        // 更新当前序列 UID
+        setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
+
+        // 重新渲染目标序列的视口
+        renderingEngine.renderViewports(targetViewports);
+
+        console.log(`✅ 序列 ${sequenceIndex} 已切换到: ${seriesInfo.seriesNumber}`);
+      } catch (error) {
+        console.error('❌ 双序列切换失败:', error);
+        setError(`切换序列失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      } finally {
+        setIsLoading(false);
+      }
+
+      return;
+    }
+
+    // 🔧 标准布局下的原始逻辑
     try {
       setIsLoading(true);
       console.log(`🔄 正在切换到序列 ${seriesInfo.seriesNumber}: ${seriesInfo.seriesDescription}`);
@@ -977,7 +1076,7 @@ function MPRViewer() {
     } finally {
       setIsLoading(false);
     }
-  }, [renderingEngine]);
+  }, [renderingEngine, viewportIds, secondaryVolumeId, activeViewportId]);
 
   // 处理层厚变化
   const handleSlabThicknessChange = (value: number) => {
@@ -1506,6 +1605,10 @@ function MPRViewer() {
   // 处理视口激活
   const handleViewportClick = (viewportId: string) => {
     setActiveViewportId(viewportId);
+
+    // 🔧 更新视口容器的active类（支持单序列和双序列布局）
+    dynamicViewportManager.updateActiveViewport(viewportId);
+
     console.log(`✅ 激活视口: ${viewportId}`);
   };
 
@@ -1944,6 +2047,12 @@ function MPRViewer() {
         // 添加事件监听器
         eventTarget.addEventListener('annotationAdded', handleAnnotationAdded as any);
         console.log('✅ 已添加标注序列追踪监听器');
+
+        // 🔧 设置第一个视口为激活状态
+        const firstViewportId = newViewportIds[0];
+        setActiveViewportId(firstViewportId);
+        dynamicViewportManager.updateActiveViewport(firstViewportId);
+        console.log(`✅ 设置视口 ${firstViewportId} 为激活状态`);
 
         console.log(`✅ 双序列 MPR 布局已应用，共 ${newViewportIds.length} 个视口`);
         return;

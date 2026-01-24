@@ -11,6 +11,7 @@ export type ViewportLayout =
   | 'grid-2x3'
   | 'grid-3x3'
   | 'grid-1-2'
+  | 'dual-mpr'
   | 'mpr'
   | 'advanced'
   | '3d-four-up'
@@ -58,6 +59,17 @@ const gridLayouts: GridLayoutOption[] = [
   { id: 'grid-3x2', name: '3×2 六视图', icon: '▲', rows: 3, cols: 2, category: 'Grid' },
   { id: 'grid-2x3', name: '2×3 六视图', icon: '▶', rows: 2, cols: 3, category: 'Grid' },
   { id: 'grid-3x3', name: '3×3 九视图', icon: '▣', rows: 3, cols: 3, category: 'Grid' },
+];
+
+// 双序列 MPR 布局配置
+const dualSequenceLayouts: ProtocolLayoutOption[] = [
+  {
+    id: 'dual-mpr',
+    name: '双序列 MPR',
+    icon: '🔷🔷',
+    description: '两行三视图，每行显示不同序列的 MPR',
+    category: 'Protocol',
+  },
 ];
 
 // 协议布局配置
@@ -130,17 +142,25 @@ const GridLayoutSelector: React.FC<GridLayoutSelectorProps> = ({
   currentLayout,
   onLayoutSelect,
 }) => {
+  console.log('🔧 GridLayoutSelector 渲染，当前布局:', currentLayout);
+
+  const handleLayoutClick = (layoutId: ViewportLayout) => {
+    console.log('🔘 网格布局按钮被点击:', layoutId);
+    onLayoutSelect(layoutId);
+  };
+
   return (
     <div className="grid-layout-selector">
       <div className="grid-layouts-grid">
         {gridLayouts.map((layout) => (
           <button
             key={layout.id}
-            onClick={() => onLayoutSelect(layout.id)}
+            onClick={() => handleLayoutClick(layout.id)}
             className={`grid-layout-item ${
               currentLayout === layout.id ? 'active' : ''
             }`}
             title={layout.name}
+            style={{ pointerEvents: 'auto' }}
           >
             <div className="layout-icon-container">
               <span className="layout-icon">{layout.icon}</span>
@@ -171,17 +191,47 @@ const ProtocolLayoutSelector: React.FC<ProtocolLayoutSelectorProps> = ({
   currentLayout,
   onLayoutSelect,
 }) => {
+  console.log('🔧 ProtocolLayoutSelector 渲染，当前布局:', currentLayout);
+
+  const handleLayoutClick = (layoutId: ViewportLayout) => {
+    console.log('🔘 协议布局按钮被点击:', layoutId);
+    onLayoutSelect(layoutId);
+  };
+
   return (
     <div className="protocol-layout-selector">
       <div className="protocol-layouts-list">
         {protocolLayouts.map((layout) => (
           <button
             key={layout.id}
-            onClick={() => onLayoutSelect(layout.id)}
+            onClick={() => handleLayoutClick(layout.id)}
             className={`protocol-layout-item ${
               currentLayout === layout.id ? 'active' : ''
             }`}
             title={layout.description}
+            style={{ pointerEvents: 'auto' }}
+          >
+            <div className="protocol-icon">{layout.icon}</div>
+            <div className="protocol-info">
+              <div className="protocol-name">{layout.name}</div>
+              {layout.description && (
+                <div className="protocol-description">{layout.description}</div>
+              )}
+            </div>
+            {currentLayout === layout.id && (
+              <div className="protocol-check">✓</div>
+            )}
+          </button>
+        ))}
+        {dualSequenceLayouts.map((layout) => (
+          <button
+            key={layout.id}
+            onClick={() => handleLayoutClick(layout.id)}
+            className={`protocol-layout-item ${
+              currentLayout === layout.id ? 'active' : ''
+            }`}
+            title={layout.description}
+            style={{ pointerEvents: 'auto' }}
           >
             <div className="protocol-icon">{layout.icon}</div>
             <div className="protocol-info">
@@ -220,17 +270,21 @@ const EnhancedLayoutPanel: React.FC<EnhancedLayoutPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'grid' | 'protocol'>('grid');
 
-  // 判断当前布局类型
-  const currentLayoutType = currentLayout.startsWith('grid-') ? 'grid' : 'protocol';
-  if (currentLayoutType !== activeTab) {
-    setActiveTab(currentLayoutType);
-  }
+  console.log('🔧 EnhancedLayoutPanel 渲染，isOpen:', isOpen, 'currentLayout:', currentLayout, 'activeTab:', activeTab);
+
+  // ❌ 移除这段代码：它会根据当前布局强制切换 Tab
+  // 这导致用户点击 Tab 后立即被切换回去
+  //
+  // const currentLayoutType = currentLayout.startsWith('grid-') ? 'grid' : 'protocol';
+  // if (currentLayoutType !== activeTab) {
+  //   setActiveTab(currentLayoutType);
+  // }
 
   if (!isOpen) return null;
 
   return (
-    <div className="layout-panel-overlay" onClick={onClose}>
-      <div className="layout-panel" onClick={(e) => e.stopPropagation()}>
+    <div className="layout-panel-overlay" onClick={onClose} style={{ pointerEvents: 'auto' }}>
+      <div className="layout-panel" onClick={(e) => e.stopPropagation()} style={{ pointerEvents: 'auto' }}>
         {/* 面板头部 */}
         <div className="layout-panel-header">
           <div className="header-title">
@@ -251,8 +305,12 @@ const EnhancedLayoutPanel: React.FC<EnhancedLayoutPanelProps> = ({
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                console.log('🔘 Tab按钮被点击:', tab.id);
+                setActiveTab(tab.id);
+              }}
               className={`layout-tab ${activeTab === tab.id ? 'active' : ''}`}
+              style={{ pointerEvents: 'auto' }}
             >
               <span className="tab-icon">{tab.icon}</span>
               <span className="tab-label">{tab.label}</span>
@@ -261,7 +319,7 @@ const EnhancedLayoutPanel: React.FC<EnhancedLayoutPanelProps> = ({
         </div>
 
         {/* 内容区域 */}
-        <div className="layout-panel-content">
+        <div className="layout-panel-content" style={{ pointerEvents: 'auto' }}>
           {activeTab === 'grid' ? (
             <GridLayoutSelector
               currentLayout={currentLayout}

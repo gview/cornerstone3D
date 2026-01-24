@@ -125,6 +125,32 @@ class DynamicViewportManager {
   }
 
   /**
+   * 更新视口激活状态
+   * @param activeViewportId 激活的视口ID
+   */
+  updateActiveViewport(activeViewportId: string): void {
+    if (!this.containerElement) return;
+
+    // 获取所有视口容器
+    const viewportContainers = Array.from(this.containerElement.children).filter(
+      child => child.classList.contains('viewport-container')
+    );
+
+    viewportContainers.forEach((container) => {
+      // 查找该容器对应的视口元素
+      const viewportElement = container.querySelector('.viewport-element');
+      if (viewportElement) {
+        const viewportId = viewportElement.id;
+        if (viewportId === activeViewportId) {
+          container.classList.add('active');
+        } else {
+          container.classList.remove('active');
+        }
+      }
+    });
+  }
+
+  /**
    * 清空视口容器
    */
   clearContainer(): void {
@@ -177,9 +203,12 @@ class DynamicViewportManager {
       const viewportContainer = document.createElement('div');
       viewportContainer.className = 'viewport-container';
 
-      // 🔧 检查是否是激活的视口
+      // 🔧 检查是否是激活的视口并添加 active 类
       const activeViewportId = this.eventHandlers.getActiveViewportId?.();
       const isActive = viewportId === activeViewportId;
+      if (isActive) {
+        viewportContainer.classList.add('active');
+      }
 
       viewportContainer.style.cssText = `
         position: relative;
@@ -187,7 +216,6 @@ class DynamicViewportManager {
         overflow: hidden;
         min-height: 200px;
         min-width: 200px;
-        ${isActive ? 'outline: 2px solid #007acc; outline-offset: -2px;' : ''}
       `;
 
       // 视口标签
