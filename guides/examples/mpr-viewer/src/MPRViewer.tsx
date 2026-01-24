@@ -17,6 +17,8 @@ import {
   EllipticalROITool,
   ScaleOverlayTool,
   Enums as csToolsEnums,
+  synchronizers,
+  SynchronizerManager,
 } from '@cornerstonejs/tools';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { annotation } from '@cornerstonejs/tools';
@@ -89,6 +91,7 @@ function MPRViewer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportsGridRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const positionLinkedRef = useRef<boolean>(false); // 位置联动状态的 ref
 
   const [renderingEngine, setRenderingEngine] = useState<RenderingEngine | null>(null);
   const [volume, setVolume] = useState<IVolume | null>(null);
@@ -103,6 +106,7 @@ function MPRViewer() {
   const [showScale, setShowScale] = useState<boolean>(true);
   const [scaleLocation, setScaleLocation] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const [showCrosshairs, setShowCrosshairs] = useState<boolean>(false);
+  const [positionLinked, setPositionLinked] = useState<boolean>(false); // 位置联动状态
   const [showSeriesPanel, setShowSeriesPanel] = useState<boolean>(false);
   const [isSeriesPanelCollapsed, setIsSeriesPanelCollapsed] = useState<boolean>(false);
   const [showAnnotationsPanel, setShowAnnotationsPanel] = useState<boolean>(false);
@@ -430,6 +434,24 @@ function MPRViewer() {
       }
     });
   }, [currentLayout, viewportIds, currentImageIndices, totalSlicesForViewports, windowLevels]);
+
+  // 清理位置联动同步器（布局切换或组件卸载时）
+  useEffect(() => {
+    return () => {
+      // 销毁所有双序列位置同步器
+      const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+      directions.forEach((direction) => {
+        const syncId = `dual-${direction}-sync`;
+        const synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+        if (synchronizer) {
+          SynchronizerManager.destroySynchronizer(syncId);
+          console.log(`💥 销毁同步器: ${syncId}`);
+        }
+      });
+    };
+  }, []);
 
   // 加载本地 DICOM 文件并创建 Volume
   const loadLocalFiles = async (files: FileList) => {
@@ -1602,6 +1624,103 @@ function MPRViewer() {
     }
   };
 
+  // 处理位置联动切换 - 使用 Cornerstone3D 官方 Synchronizer
+  const handleTogglePositionLink = () => {
+    const newPositionLinked = !positionLinked;
+    setPositionLinked(newPositionLinked);
+    positionLinkedRef.current = newPositionLinked;
+
+    // 检查是否是双序列 MPR 布局
+    const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
+
+    if (!isDualSequenceLayout) {
+      console.warn('⚠️ 位置联动功能仅在双序列 MPR 布局下可用');
+      setPositionLinked(false);
+      positionLinkedRef.current = false;
+      return;
+    }
+
+    if (!renderingEngine) {
+      console.error('❌ RenderingEngine 未初始化');
+      return;
+    }
+
+    const renderingEngineId = renderingEngine.id;
+
+    if (newPositionLinked) {
+      console.log('✅ 已启用双序列双向位置联动（使用官方 Synchronizer）');
+
+      // 为每个方向创建独立的同步器（Axial, Sagittal, Coronal）
+      const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+      directions.forEach((direction, index) => {
+        const syncId = `dual-${direction}-sync`;
+        const viewport1Id = viewportIds[index];        // 序列1的视口
+        const viewport2Id = viewportIds[3 + index];    // 序列2的视口
+
+        // 检查同步器是否已存在
+        let synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+        if (!synchronizer) {
+          // 创建新的相机位置同步器
+          synchronizer = synchronizers.createCameraPositionSynchronizer(syncId);
+
+          console.log(`  📋 创建同步器: ${syncId}`);
+        }
+
+        // 添加视口到同步器（双向同步）
+        // 序列1的视口作为 source 和 target
+        const viewport1Info = { viewportId: viewport1Id, renderingEngineId };
+        const viewport2Info = { viewportId: viewport2Id, renderingEngineId };
+
+        synchronizer.add(viewport1Info);
+        synchronizer.add(viewport2Info);
+
+        console.log(`  🔗 添加视口到 ${syncId}:`);
+        console.log(`     - ${viewport1Id} (序列1 ${direction})`);
+        console.log(`     - ${viewport2Id} (序列2 ${direction})`);
+      });
+
+      console.log('✅ 位置同步器配置完成');
+    } else {
+      console.log('✅ 已禁用双序列位置联动');
+
+      // 移除所有视口从同步器
+      const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+      directions.forEach((direction) => {
+        const syncId = `dual-${direction}-sync`;
+        const synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+        if (synchronizer) {
+          const viewport1Id = viewportIds[directions.indexOf(direction)];
+          const viewport2Id = viewportIds[3 + directions.indexOf(direction)];
+
+          const viewport1Info = { viewportId: viewport1Id, renderingEngineId };
+          const viewport2Info = { viewportId: viewport2Id, renderingEngineId };
+
+          synchronizer.remove(viewport1Info);
+          synchronizer.remove(viewport2Info);
+
+          console.log(`  🗑️  从 ${syncId} 移除视口:`);
+          console.log(`     - ${viewport1Id}`);
+          console.log(`     - ${viewport2Id}`);
+
+          // 检查同步器是否为空，如果为空则销毁
+          const sourceViewports = synchronizer.getSourceViewports();
+          const targetViewports = synchronizer.getTargetViewports();
+
+          if (!sourceViewports.length && !targetViewports.length) {
+            SynchronizerManager.destroySynchronizer(syncId);
+            console.log(`  💥 销毁同步器: ${syncId}`);
+          }
+        }
+      });
+
+      console.log('✅ 位置同步器清理完成');
+    }
+  };
+
   // 处理视口激活
   const handleViewportClick = (viewportId: string) => {
     setActiveViewportId(viewportId);
@@ -1808,6 +1927,26 @@ function MPRViewer() {
     if (!renderingEngine || !volume || !volumeId) {
       console.warn('无法切换布局: 渲染引擎或体积数据未初始化');
       return;
+    }
+
+    // 如果切换到非双序列布局，自动禁用位置联动
+    if (layout !== 'dual-mpr' && positionLinked) {
+      console.log('⚠️ 切换到非双序列布局，自动禁用位置联动');
+      setPositionLinked(false);
+      positionLinkedRef.current = false;
+
+      // 销毁所有双序列位置同步器
+      const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+      directions.forEach((direction) => {
+        const syncId = `dual-${direction}-sync`;
+        const synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+        if (synchronizer) {
+          SynchronizerManager.destroySynchronizer(syncId);
+          console.log(`  💥 销毁同步器: ${syncId}`);
+        }
+      });
     }
 
     // 处理双序列 MPR 布局
@@ -2348,6 +2487,9 @@ function MPRViewer() {
         showAnnotationsPanel={showAnnotationsPanel}
         onToggleAnnotationsPanel={handleToggleAnnotationsPanel}
         hasVolume={!!volume}
+        positionLinked={positionLinked}
+        onTogglePositionLink={handleTogglePositionLink}
+        isDualSequenceLayout={viewportIds.length === 6 && !!secondaryVolumeId}
       />
 
       {/* 主内容区域 */}

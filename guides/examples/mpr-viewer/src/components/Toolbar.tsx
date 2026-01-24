@@ -54,6 +54,11 @@ export interface ToolbarProps {
 
   // 通用状态
   hasVolume: boolean;
+
+  // 位置联动
+  positionLinked: boolean;
+  onTogglePositionLink: () => void;
+  isDualSequenceLayout: boolean;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -86,6 +91,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
   hasVolume,
   onToggleWindowLevel,
   isWindowLevelActive,
+  positionLinked,
+  onTogglePositionLink,
+  isDualSequenceLayout,
 }) => {
   // 工具配置
   const allTools = [
@@ -229,6 +237,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
           active={isWindowLevelActive}
           disabled={!hasVolume}
         />
+        {isDualSequenceLayout && (
+          <IconButton
+            icon="🔗"
+            onClick={onTogglePositionLink}
+            tooltip={positionLinked ? '关闭位置联动' : '开启位置联动'}
+            active={positionLinked}
+            disabled={!hasVolume}
+          />
+        )}
       </div>
 
       {/* 测量工具组 */}

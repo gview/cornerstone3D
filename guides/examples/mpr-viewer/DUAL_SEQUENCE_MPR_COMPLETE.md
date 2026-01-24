@@ -2,9 +2,9 @@
 
 ## 概述
 
-本文档详细说明了双序列 MPR（Multi-Planar Reconstruction）布局的完整实现，包括两个独立序列的同时显示、测量智能跳转、十字线独立联动、视口激活状态等核心功能。
+本文档详细说明了双序列 MPR（Multi-Planar Reconstruction）布局的完整实现，包括两个独立序列的同时显示、测量智能跳转、十字线独立联动、视口激活状态、位置联动等核心功能。
 
-**版本**: 1.2
+**版本**: 2.1
 **实现日期**: 2026-01-24
 **更新日期**: 2026-01-24
 **状态**: ✅ 已完成并通过测试
@@ -36,7 +36,7 @@
 - **序列间独立**: 两个序列的十字线互不干扰
 - **同步控制**: 工具栏按钮同时控制两个序列
 
-### 4. 视口激活状态显示 ✨ 新增
+### 4. 视口激活状态显示
 
 - **蓝色边框**: 激活的视口显示蓝色边框（2px solid #007acc）
 - **点击切换**: 点击任意视口即可切换激活状态
@@ -46,7 +46,27 @@
   - 非激活视口悬停：灰色边框
 - **自动初始化**: 切换到双序列布局时，第一个视口自动激活
 
-### 5. 完整工具支持
+### 5. 位置联动 ✨ 改进
+
+- **双向同步**: 序列1 ↔ 序列2 的相机位置完全同步
+- **官方实现**: 使用 Cornerstone3D 官方 `CameraPositionSynchronizer` API
+- **独立同步器**: 为每个方向创建独立的同步器（Axial、Sagittal、Coronal）
+- **自动处理**: 官方 API 自动处理换层、旋转、缩放等所有位置变化
+- **工具栏控制**: 工具栏🔗按钮开启/关闭位置联动
+- **自动管理**: 切换布局时自动禁用，组件卸载时自动清理
+- **性能优化**: 官方实现性能更优，无循环触发问题
+
+### 6. 双序列独立切换
+
+- **智能检测**: 自动检测当前是否为双序列 MPR 布局
+- **激活视口识别**: 根据激活视口确定要更新哪个序列
+- **独立加载**: 双击序列时只更新激活视口所属的序列行
+  - 点击序列 1 的视口 → 更新上排三个视口
+  - 点击序列 2 的视口 → 更新下排三个视口
+- **窗宽窗位同步**: 自动应用新序列的窗宽窗位设置
+- **状态更新**: 正确更新 `volumeId` 和 `secondaryVolumeId` 状态
+
+### 7. 完整工具支持
 
 - ✅ 平移（中键拖动）
 - ✅ 缩放（右键拖动）
@@ -999,6 +1019,148 @@ mpr-seq1 工具组 → 管理序列 1 的 3 个视口
 mpr-seq2 工具组 → 管理序列 2 的 3 个视口
 ```
 
+### 位置联动实现 ✨ 改进
+
+**核心机制**: 使用 Cornerstone3D 官方 `CameraPositionSynchronizer` API
+
+**导入依赖**:
+```typescript
+import {
+  synchronizers,
+  SynchronizerManager,
+} from '@cornerstonejs/tools';
+```
+
+**启用位置联动**:
+```typescript
+const handleTogglePositionLink = () => {
+  const newPositionLinked = !positionLinked;
+  setPositionLinked(newPositionLinked);
+  positionLinkedRef.current = newPositionLinked;
+
+  const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
+  if (!isDualSequenceLayout) {
+    console.warn('⚠️ 位置联动功能仅在双序列 MPR 布局下可用');
+    setPositionLinked(false);
+    return;
+  }
+
+  if (newPositionLinked) {
+    console.log('✅ 已启用双序列双向位置联动（使用官方 Synchronizer）');
+
+    // 为每个方向创建独立的同步器
+    const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+    directions.forEach((direction, index) => {
+      const syncId = `dual-${direction}-sync`;
+      const viewport1Id = viewportIds[index];        // 序列1的视口
+      const viewport2Id = viewportIds[3 + index];    // 序列2的视口
+
+      // 检查同步器是否已存在
+      let synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+      if (!synchronizer) {
+        // 创建新的相机位置同步器
+        synchronizer = synchronizers.createCameraPositionSynchronizer(syncId);
+        console.log(`  📋 创建同步器: ${syncId}`);
+      }
+
+      // 添加视口到同步器（双向同步）
+      const renderingEngineId = renderingEngine.id;
+      const viewport1Info = { viewportId: viewport1Id, renderingEngineId };
+      const viewport2Info = { viewportId: viewport2Id, renderingEngineId };
+
+      synchronizer.add(viewport1Info);
+      synchronizer.add(viewport2Info);
+
+      console.log(`  🔗 添加视口到 ${syncId}:`);
+      console.log(`     - ${viewport1Id} (序列1 ${direction})`);
+      console.log(`     - ${viewport2Id} (序列2 ${direction})`);
+    });
+
+    console.log('✅ 位置同步器配置完成');
+  }
+};
+```
+
+**禁用位置联动**:
+```typescript
+// 移除所有视口从同步器
+const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+directions.forEach((direction) => {
+  const syncId = `dual-${direction}-sync`;
+  const synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+  if (synchronizer) {
+    const viewport1Id = viewportIds[directions.indexOf(direction)];
+    const viewport2Id = viewportIds[3 + directions.indexOf(direction)];
+
+    const viewport1Info = { viewportId: viewport1Id, renderingEngineId };
+    const viewport2Info = { viewportId: viewport2Id, renderingEngineId };
+
+    synchronizer.remove(viewport1Info);
+    synchronizer.remove(viewport2Info);
+
+    // 检查同步器是否为空，如果为空则销毁
+    const sourceViewports = synchronizer.getSourceViewports();
+    const targetViewports = synchronizer.getTargetViewports();
+
+    if (!sourceViewports.length && !targetViewports.length) {
+      SynchronizerManager.destroySynchronizer(syncId);
+      console.log(`  💥 销毁同步器: ${syncId}`);
+    }
+  }
+});
+```
+
+**组件卸载时清理**:
+```typescript
+useEffect(() => {
+  return () => {
+    // 销毁所有双序列位置同步器
+    const directions = ['axial', 'sagittal', 'coronal'] as const;
+
+    directions.forEach((direction) => {
+      const syncId = `dual-${direction}-sync`;
+      const synchronizer = SynchronizerManager.getSynchronizer(syncId);
+
+      if (synchronizer) {
+        SynchronizerManager.destroySynchronizer(syncId);
+        console.log(`💥 销毁同步器: ${syncId}`);
+      }
+    });
+  };
+}, []);
+```
+
+**同步器架构**:
+
+| 同步器 ID | 序列1视口 | 序列2视口 | 说明 |
+|----------|---------|---------|------|
+| `dual-axial-sync` | viewportIds[0] | viewportIds[3] | Axial 视图同步 |
+| `dual-sagittal-sync` | viewportIds[1] | viewportIds[4] | Sagittal 视图同步 |
+| `dual-coronal-sync` | viewportIds[2] | viewportIds[5] | Coronal 视图同步 |
+
+**技术优势**:
+1. **官方 API**: 使用 Cornerstone3D 官方同步器，与 OHIF TMTV 一致
+2. **自动处理**: 无需手动监听事件，官方 API 自动处理所有同步逻辑
+3. **性能优化**: 官方实现经过充分测试和优化
+4. **无循环问题**: 官方 API 内部处理循环防止
+5. **完整支持**: 支持换层、旋转、缩放、平移等所有位置变化
+6. **简化代码**: 无需手动管理事件监听器、去抖、状态追踪等
+
+**标准布局**:
+```
+mpr 工具组 → 管理 3 个视口
+```
+
+**双序列布局**:
+```
+mpr-seq1 工具组 → 管理序列 1 的 3 个视口
+mpr-seq2 工具组 → 管理序列 2 的 3 个视口
+```
+
 ### 渲染优化
 
 只渲染相关的视口，而不是所有视口：
@@ -1167,6 +1329,7 @@ if (ToolGroupManager.getToolGroup('mpr-seq1')) {
 5. **DOM 协调**: 正确处理 React 和手动 DOM 操作的时序
 6. **视口激活**: 通过 DOM 查询动态更新视口激活状态，避免闭包陷阱 ✨ 新增
 7. **序列切换**: 支持双序列布局下的独立序列切换，根据激活视口智能判断目标序列 ✨ 新增
+8. **位置联动**: 使用官方 Synchronizer API 实现跨序列位置同步，支持所有操作 ✨ 改进
 
 通过系统性地解决这些问题，我们实现了一个功能完整、性能良好的双序列 MPR 查看器。用户可以：
 
@@ -1175,9 +1338,61 @@ if (ToolGroupManager.getToolGroup('mpr-seq1')) {
 - 使用所有常用工具（平移、缩放、换层、十字线、窗宽窗位、测量）
 - 智能跳转到测量所属的序列
 - 直观地看到当前激活的视口
+- 使用位置联动功能同步两个序列的相机位置（包括非标准方向下的换层）✨ 改进
 
 ---
 
-**文档版本**: 1.2
+## 版本历史
+
+### v2.1 (2026-01-24) - 位置联动重构
+**重大改进**: 使用 Cornerstone3D 官方 Synchronizer API
+
+- ✨ **重写位置联动实现**:
+  - 从手动事件监听改为使用官方 `CameraPositionSynchronizer`
+  - 为每个方向创建独立的同步器（Axial、Sagittal、Coronal）
+  - 简化代码逻辑，移除手动事件管理、去抖、状态追踪等复杂代码
+
+- 🐛 **修复关键问题**:
+  - 修复非标准方向（旋转后）换层时的差层问题
+  - 解决循环触发导致的性能问题
+  - 修复 IMAGE_RENDERED 事件不触发的同步失败
+
+- 📚 **参考实现**:
+  - 与 OHIF TMTV 的实现方式完全一致
+  - 使用 `@cornerstonejs/tools` 的 `synchronizers` 模块
+
+- 🔧 **代码简化**:
+  - 删除 ~150 行手动事件管理代码
+  - 删除去抖定时器管理
+  - 删除同步状态追踪 Set/Map
+  - 使用官方 API 的自动管理机制
+
+**技术细节**:
+```typescript
+// 创建同步器
+synchronizers.createCameraPositionSynchronizer(syncId);
+
+// 添加视口
+synchronizer.add({ viewportId, renderingEngineId });
+
+// 移除视口
+synchronizer.remove({ viewportId, renderingEngineId });
+
+// 销毁同步器
+SynchronizerManager.destroySynchronizer(syncId);
+```
+
+### v2.0 (2026-01-24) - 位置联动初始实现
+- ✨ 新增位置联动功能（手动事件监听实现）
+- ✨ 新增双序列独立切换功能
+- ✨ 新增视口激活状态显示
+
+### v1.2 (2026-01-24) - 测量跳转优化
+- ✨ 修复测量面板智能跳转
+- ✨ 添加序列信息元数据
+
+---
+
+**文档版本**: 2.1
 **最后更新**: 2026-01-24
 **维护者**: Claude Code Assistant
