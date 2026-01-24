@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { annotation, Enums } from '@cornerstonejs/tools';
 import { eventTarget } from '@cornerstonejs/core';
 import type { Types } from '@cornerstonejs/core';
+import {
+  tryJumpToAnnotationUsingViewReference,
+  jumpToAnnotationUsingCamera,
+} from '../utils/measurementNavigationUtils';
 
 const { visibility, state } = annotation;
 
@@ -321,7 +325,8 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
     }
   };
 
-  // 跳转到测量的位置
+  // 🔧 跳转到测量的位置 - 使用 OHIF 风格的实现
+  // 参考 OHIF Viewers,使用 setViewReference 和智能相机调整
   const jumpToAnnotation = (annotation: Annotation) => {
     try {
       if (!renderingEngine) return;
@@ -382,62 +387,7 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         }
       }
 
-      // 从测量数据中获取空间坐标
-      let targetPoint: { x: number; y: number; z: number } | undefined;
-
-      // 尝试从 handles 中获取坐标
-      if (annotation.data.handles) {
-        const { handles } = annotation.data;
-
-        // 调试：输出工具类型和 handles 结构
-        console.log('🔍 测量工具:', annotation.metadata.toolName);
-        console.log('🔍 Handles 结构:', JSON.stringify(handles, null, 2));
-
-        // 对于线段工具（如长度、角度）- 使用 start 点
-        if (handles.start && typeof handles.start.x === 'number') {
-          targetPoint = handles.start;
-        }
-        // 对于点数组和 ROI 工具
-        else if (handles.points && Array.isArray(handles.points) && handles.points.length > 0) {
-          const firstPoint = handles.points[0];
-
-          // 检查是对象格式 {x, y, z} 还是数组格式 [x, y, z]
-          if (firstPoint && typeof firstPoint === 'object') {
-            if (typeof firstPoint.x === 'number') {
-              // 对象格式 - 点工具（如探针）
-              targetPoint = firstPoint;
-            } else if (Array.isArray(firstPoint) && firstPoint.length >= 3) {
-              // 数组格式 - ROI 工具（矩形、椭圆）
-              // 计算所有顶点的中心点
-              let sumX = 0, sumY = 0, sumZ = 0;
-              handles.points.forEach((point: any) => {
-                if (Array.isArray(point) && point.length >= 3) {
-                  sumX += point[0];
-                  sumY += point[1];
-                  sumZ += point[2];
-                }
-              });
-
-              const count = handles.points.length;
-              targetPoint = {
-                x: sumX / count,
-                y: sumY / count,
-                z: sumZ / count
-              };
-
-              console.log(`✅ ROI 中心点: [${targetPoint.x.toFixed(2)}, ${targetPoint.y.toFixed(2)}, ${targetPoint.z.toFixed(2)}]`);
-            }
-          }
-        }
-      }
-
-      if (!targetPoint || typeof targetPoint.x !== 'number' || isNaN(targetPoint.x)) {
-        console.warn('⚠️ 无法获取测量的空间坐标');
-        return;
-      }
-
-      // 🔧 根据布局和序列选择视口
-      let axialViewport, sagittalViewport, coronalViewport;
+      // 🔧 根据布局和序列选择目标视口
       let targetViewportIds: string[];
 
       if (isDualSequenceLayout) {
@@ -446,9 +396,6 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
 
         console.log(`🔧 双序列 MPR 布局，使用序列 ${targetSequenceIndex + 1} 的视口（索引 ${seqStartIndex}-${seqStartIndex + 2}）`);
 
-        axialViewport = renderingEngine.getViewport(viewportIds[seqStartIndex]) as Types.IVolumeViewport;
-        sagittalViewport = renderingEngine.getViewport(viewportIds[seqStartIndex + 1]) as Types.IVolumeViewport;
-        coronalViewport = renderingEngine.getViewport(viewportIds[seqStartIndex + 2]) as Types.IVolumeViewport;
         targetViewportIds = [
           viewportIds[seqStartIndex],
           viewportIds[seqStartIndex + 1],
@@ -456,65 +403,38 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         ];
       } else {
         // 标准三视图布局
-        axialViewport = renderingEngine.getViewport(viewportIds[0]) as Types.IVolumeViewport;
-        sagittalViewport = renderingEngine.getViewport(viewportIds[1]) as Types.IVolumeViewport;
-        coronalViewport = renderingEngine.getViewport(viewportIds[2]) as Types.IVolumeViewport;
         targetViewportIds = viewportIds;
       }
 
-      if (!axialViewport || !sagittalViewport || !coronalViewport) {
-        console.warn('⚠️ 无法获取视口');
-        return;
-      }
+      // ✨ 使用新的导航方式 - 参考 OHIF
+      // 为每个视口应用跳转
+      let viewRefCount = 0;
+      let cameraCount = 0;
 
-      // 获取当前相机
-      const axialCamera = axialViewport.getCamera();
-      const sagittalCamera = sagittalViewport.getCamera();
-      const coronalCamera = coronalViewport.getCamera();
+      targetViewportIds.forEach((viewportId) => {
+        const viewport = renderingEngine!.getViewport(viewportId) as Types.IVolumeViewport;
+        if (!viewport) {
+          console.warn(`⚠️ 无法获取视口: ${viewportId}`);
+          return;
+        }
 
-      // 检查相机对象的有效性
-      if (!axialCamera.position || !axialCamera.focalPoint ||
-          !sagittalCamera.position || !sagittalCamera.focalPoint ||
-          !coronalCamera.position || !coronalCamera.focalPoint) {
-        console.warn('⚠️ 相机数据无效');
-        return;
-      }
+        // 首先尝试使用 setViewReference (官方 API,自动处理方向)
+        // 这需要完整的元数据支持,如果失败会回退到相机调整
+        const success = tryJumpToAnnotationUsingViewReference(viewport, annotation);
+        if (success) {
+          viewRefCount++;
+        } else {
+          // 如果 setViewReference 失败,使用相机调整
+          // 传递完整的 annotation 对象
+          jumpToAnnotationUsingCamera(viewport, annotation);
+          cameraCount++;
+        }
+      });
 
-      // 只更新每个视口对应轴的 focalPoint，保持相机位置不变
-      // 这样可以保持缩放和平移，只改变切片位置
-
-      // Axial 视口（横断位）：只更新 z 轴（切片层）
-      axialCamera.focalPoint = [
-        axialCamera.focalPoint[0],
-        axialCamera.focalPoint[1],
-        targetPoint.z
-      ] as Types.Point3;
-
-      // Sagittal 视口（矢状位）：只更新 x 轴（切片层）
-      sagittalCamera.focalPoint = [
-        targetPoint.x,
-        sagittalCamera.focalPoint[1],
-        sagittalCamera.focalPoint[2]
-      ] as Types.Point3;
-
-      // Coronal 视口（冠状位）：只更新 y 轴（切片层）
-      coronalCamera.focalPoint = [
-        coronalCamera.focalPoint[0],
-        targetPoint.y,
-        coronalCamera.focalPoint[2]
-      ] as Types.Point3;
-
-      // 应用相机并重新渲染
-      axialViewport.setCamera(axialCamera);
-      sagittalViewport.setCamera(sagittalCamera);
-      coronalViewport.setCamera(coronalCamera);
-
+      // 渲染所有目标视口
       renderingEngine.renderViewports(targetViewportIds);
 
-      const xStr = (targetPoint.x ?? 0).toFixed(2);
-      const yStr = (targetPoint.y ?? 0).toFixed(2);
-      const zStr = (targetPoint.z ?? 0).toFixed(2);
-      console.log(`✅ 已跳转到测量位置: [${xStr}, ${yStr}, ${zStr}]`);
+      console.log(`✅ 跳转完成: ${viewRefCount} 个视口使用 setViewReference, ${cameraCount} 个视口使用相机调整`);
       console.log(`✅ 使用的视口索引: ${targetViewportIds.join(', ')}`);
     } catch (error) {
       console.error('❌ 跳转到测量位置失败:', error);

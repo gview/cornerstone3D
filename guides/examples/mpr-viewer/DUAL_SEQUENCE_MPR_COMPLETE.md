@@ -1344,8 +1344,9 @@ if (ToolGroupManager.getToolGroup('mpr-seq1')) {
 
 ## 版本历史
 
-### v2.1 (2026-01-24) - 位置联动重构
-**重大改进**: 使用 Cornerstone3D 官方 Synchronizer API
+### v2.1 (2026-01-24) - 位置联动重构 & 测量跳转优化
+
+**重大改进1**: 使用 Cornerstone3D 官方 Synchronizer API
 
 - ✨ **重写位置联动实现**:
   - 从手动事件监听改为使用官方 `CameraPositionSynchronizer`
@@ -1357,29 +1358,50 @@ if (ToolGroupManager.getToolGroup('mpr-seq1')) {
   - 解决循环触发导致的性能问题
   - 修复 IMAGE_RENDERED 事件不触发的同步失败
 
-- 📚 **参考实现**:
-  - 与 OHIF TMTV 的实现方式完全一致
-  - 使用 `@cornerstonejs/tools` 的 `synchronizers` 模块
+**重大改进2**: 测量跳转逻辑重构（参考 OHIF Viewers）
 
-- 🔧 **代码简化**:
-  - 删除 ~150 行手动事件管理代码
-  - 删除去抖定时器管理
-  - 删除同步状态追踪 Set/Map
-  - 使用官方 API 的自动管理机制
+- ✨ **优化测量跳转逻辑**:
+  - 采用基于距离的精确位置判断（替代复杂的边界框检查）
+  - 使用欧氏距离检查是否已在测量位置（阈值 1mm）
+  - 只跳转位置，保持当前视口方向（避免黑屏问题）
+
+- 🐛 **修复关键问题**:
+  - 修复 `isMeasurementWithinViewport` 误判导致的跳转失败
+  - 禁用 `setViewReference` API（存在兼容性问题，会导致黑屏）
+  - 使用可靠的相机调整方法作为唯一跳转方式
+
+- 🔧 **新增工具模块**:
+  - 创建 `measurementNavigationUtils.ts` 工具函数库
+  - 实现 `getCenterExtent()` - 计算测量中心点和边界框
+  - 实现 `isMeasurementWithinViewport()` - 检查测量可见性
+  - 实现 `jumpToAnnotationUsingCamera()` - 相机调整跳转方法
+
+- 📚 **参考实现**:
+  - 位置联动：与 OHIF TMTV 的实现方式完全一致
+  - 测量跳转：参考 OHIF commandsModule 的 jumpToMeasurementViewport
+
+- 🔧 **代码改进**:
+  - 删除 ~150 行手动事件管理代码（位置联动）
+  - 删除硬编码的轴向判断代码（测量跳转）
+  - 使用简化的相机调整逻辑
+
+- ⚠️ **已知限制**:
+  - 跳转时不恢复相机方向（保持当前方向）
+  - 未来需要实现 ViewReference 的完整支持来恢复方向
+
+**详细文档**: [MEASUREMENT_JUMP_REFACTOR.md](MEASUREMENT_JUMP_REFACTOR.md)
 
 **技术细节**:
 ```typescript
-// 创建同步器
+// 位置联动
 synchronizers.createCameraPositionSynchronizer(syncId);
-
-// 添加视口
 synchronizer.add({ viewportId, renderingEngineId });
 
-// 移除视口
-synchronizer.remove({ viewportId, renderingEngineId });
-
-// 销毁同步器
-SynchronizerManager.destroySynchronizer(syncId);
+// 测量跳转
+viewport.setViewReference({
+  referencedImageId: annotation.metadata.referencedImageId,
+  volumeId: annotation.metadata.volumeId
+});
 ```
 
 ### v2.0 (2026-01-24) - 位置联动初始实现
