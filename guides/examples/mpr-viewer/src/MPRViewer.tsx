@@ -995,6 +995,10 @@ function MPRViewer() {
       setIsLoading(true);
       console.log(`🔄 正在切换到序列 ${seriesInfo.seriesNumber}: ${seriesInfo.seriesDescription}`);
 
+      // 🔧 使用实际的视口ID（从viewportIds状态获取），而不是硬编码的静态ID
+      const targetViewportIds = viewportIds.length > 0 ? viewportIds : ['AXIAL', 'SAGITTAL', 'CORONAL'];
+      console.log(`  目标视口:`, targetViewportIds);
+
       // 获取工具组，暂时禁用十字线工具以避免重复的重置操作
       const toolGroup = ToolGroupManager.getToolGroup('mpr');
       // 检查十字线工具是否处于激活状态
@@ -1028,11 +1032,10 @@ function MPRViewer() {
       await setVolumesForViewports(
         renderingEngine,
         [{ volumeId }],
-        ['AXIAL', 'SAGITTAL', 'CORONAL']
+        targetViewportIds
       );
 
       // 从新序列的第一张图像元数据中获取窗宽窗位信息并应用
-      const { metaData, utilities } = await import('@cornerstonejs/core');
       const voi = metaData.get('voiLutModule', seriesInfo.imageIds[0]);
 
       if (voi) {
@@ -1044,7 +1047,7 @@ function MPRViewer() {
 
         // 为每个视口设置窗宽窗位
         const newWindowLevels: Record<string, { center: number; width: number }> = {};
-        ['AXIAL', 'SAGITTAL', 'CORONAL'].forEach((viewportId) => {
+        targetViewportIds.forEach((viewportId) => {
           const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
           if (viewport) {
             viewport.setProperties({ voiRange });
@@ -1065,7 +1068,7 @@ function MPRViewer() {
         const defaultVoiRange = { lower: -200, upper: 200 };
         const newWindowLevels: Record<string, { center: number; width: number }> = {};
 
-        ['AXIAL', 'SAGITTAL', 'CORONAL'].forEach((viewportId) => {
+        targetViewportIds.forEach((viewportId) => {
           const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
           if (viewport) {
             viewport.setProperties({ voiRange: defaultVoiRange });
@@ -1089,7 +1092,7 @@ function MPRViewer() {
       }
 
       // 重新渲染所有视口
-      renderingEngine.renderViewports(['AXIAL', 'SAGITTAL', 'CORONAL']);
+      renderingEngine.renderViewports(targetViewportIds);
 
       console.log(`✅ 已切换到序列 ${seriesInfo.seriesNumber}`);
     } catch (error) {
@@ -1978,12 +1981,19 @@ function MPRViewer() {
           getActiveViewportId: () => activeViewportId,
         });
 
-        // 获取第二个序列的 volume ID
+        // 🔧 从单序列MPR切换到双序列MPR：
+        // 1. 当前volume（volumeId）作为第一个序列
+        // 2. 加载新的序列作为第二个序列
+        console.log(`📋 当前序列将作为序列1保留: ${currentSeriesUID}`);
+
+        // 查找第二个序列（不是当前序列的序列）
         const secondSeries = seriesList.find(s => s.seriesInstanceUID !== currentSeriesUID);
         if (!secondSeries) {
           alert('无法找到第二个序列');
           return;
         }
+
+        console.log(`📋 将加载序列2: ${secondSeries.seriesInstanceUID}`);
 
         // 创建或获取第二个序列的 volume
         let volumeId2 = secondaryVolumeId;
@@ -1994,13 +2004,18 @@ function MPRViewer() {
           });
           secondVolume.load();
           setSecondaryVolumeId(volumeId2);
+          console.log(`✅ 已创建并加载序列2的volume: ${volumeId2}`);
+        } else {
+          console.log(`✅ 使用已缓存的序列2 volume: ${volumeId2}`);
         }
 
         // 应用双序列 MPR 布局
         const dualConfig: DualSequenceConfig = {
-          volumeId1: volumeId,
-          volumeId2: volumeId2,
+          volumeId1: volumeId, // 🔥 当前volume作为序列1
+          volumeId2: volumeId2, // 🔥 新加载的序列作为序列2
         };
+
+        console.log(`🔧 双序列配置 - 序列1: ${volumeId}, 序列2: ${volumeId2}`);
 
         const newViewportIds = await dynamicViewportManager.applyDualSequenceMPRLayout(
           dualConfig,
@@ -2198,6 +2213,264 @@ function MPRViewer() {
       } catch (error) {
         console.error('❌ 应用双序列 MPR 布局失败:', error);
         alert(`双序列 MPR 布局切换失败: ${error}`);
+        return;
+      }
+    }
+
+    // 🔧 处理从双序列 MPR 切换到标准 MPR 布局
+    const isSwitchingFromDualToMPR = currentLayout === 'dual-mpr' && (
+      layout === 'mpr' ||
+      layout === '3d-four-up' ||
+      layout === '3d-main' ||
+      layout === 'axial-primary' ||
+      layout === '3d-only' ||
+      layout === '3d-primary' ||
+      layout === 'frame-view' ||
+      layout === 'advanced' ||
+      layout === 'grid-1x3'
+    );
+
+    if (isSwitchingFromDualToMPR && viewportIds.length === 6) {
+      console.log('🔄 从双序列 MPR 切换到标准 MPR 布局');
+      console.log(`  当前激活视口: ${activeViewportId}`);
+
+      try {
+        // 确定激活视口属于哪个序列
+        const activeViewportIndex = viewportIds.indexOf(activeViewportId);
+        if (activeViewportIndex === -1) {
+          console.warn(`⚠️ 激活视口 ${activeViewportId} 不在当前视口列表中，使用序列1`);
+        }
+
+        const activeSeqIndex = activeViewportIndex >= 0 ? (activeViewportIndex < 3 ? 1 : 2) : 1;
+        console.log(`  激活视口属于序列 ${activeSeqIndex}`);
+
+        // 确定要保留的序列
+        const targetSeriesIndex = activeSeqIndex - 1; // 转换为0-based索引
+        const targetSeries = seriesList[targetSeriesIndex];
+
+        if (!targetSeries) {
+          console.error('❌ 无法找到目标序列');
+          alert('无法切换到MPR布局：找不到目标序列');
+          return;
+        }
+
+        console.log(`  保留序列: ${targetSeries.seriesNumber} - ${targetSeries.seriesDescription}`);
+
+        // 确定使用哪个 volume ID
+        let targetVolumeId = volumeId;
+        let targetVolume = volume;
+
+        if (activeSeqIndex === 2 && secondaryVolumeId) {
+          // 如果激活视口在序列2，使用第二个 volume
+          targetVolumeId = secondaryVolumeId;
+
+          // 直接使用 createAndCacheVolume，如果已存在会返回缓存的实例
+          console.log('获取序列2的 volume...');
+          targetVolume = await volumeLoader.createAndCacheVolume(secondaryVolumeId, {
+            imageIds: targetSeries.imageIds,
+          });
+
+          // 确保加载
+          targetVolume.load();
+          console.log('序列2的 volume 已加载');
+
+          // 更新 volume 相关状态
+          setVolume(targetVolume as any);
+          setVolumeId(targetVolumeId);
+
+          // 清除辅助 volume ID
+          setSecondaryVolumeId(null);
+        } else {
+          // 使用序列1，清除辅助 volume
+          setSecondaryVolumeId(null);
+        }
+
+        console.log(`  使用 volume ID: ${targetVolumeId}`);
+
+        // 更新当前序列 UID 为保留的序列
+        if (targetSeries.seriesInstanceUID !== currentSeriesUID) {
+          setCurrentSeriesUID(targetSeries.seriesInstanceUID);
+        }
+
+        // 🔧 保存当前视口的状态（相机、窗宽窗位等）
+        console.log('🔧 保存当前视口状态...');
+        const preservedViewports = activeSeqIndex === 1
+          ? viewportIds.slice(0, 3)  // 保留序列1的视口（索引0-2）
+          : viewportIds.slice(3, 6); // 保留序列2的视口（索引3-5）
+
+        const viewportStates: Array<{ camera: any; voiRange: any; orientation: Enums.OrientationAxis }> = [];
+
+        preservedViewports.forEach((vpId) => {
+          try {
+            const vp = renderingEngine!.getViewport(vpId) as Types.IVolumeViewport;
+            if (vp) {
+              const camera = vp.getCamera();
+              const properties = vp.getProperties();
+              const orientation = vp.getProperties().orientation as Enums.OrientationAxis;
+              viewportStates.push({ camera, voiRange: properties.voiRange, orientation });
+            }
+          } catch (error) {
+            console.warn(`  ⚠️ 无法保存视口 ${vpId} 的状态:`, error);
+            viewportStates.push({ camera: null, voiRange: null, orientation: null });
+          }
+        });
+
+        console.log(`  ✓ 已保存 ${viewportStates.length} 个视口的状态`);
+
+        // 🔧 清空容器
+        console.log('🔧 清空视口容器...');
+        if (viewportsGridRef.current) {
+          const container = viewportsGridRef.current;
+          const containers = container.querySelectorAll('.viewport-container');
+          containers.forEach(c => c.remove());
+          console.log(`  ✓ 已移除所有视口容器 (${containers.length}个)`);
+        }
+
+        // 🔧 使用 dynamicViewportManager 创建新的3个视口（1行3列）
+        console.log('🔧 使用 dynamicViewportManager 创建新的3个视口...');
+
+        dynamicViewportManager.initialize(renderingEngine, viewportsGridRef.current!, {
+          onViewportClick: handleViewportClick,
+          onViewportDoubleClick: handleViewportDoubleClick,
+          getActiveViewportId: () => activeViewportId,
+        });
+
+        const newViewportIds = await dynamicViewportManager.applyMPRLayout(
+          targetVolumeId,
+          viewportIds
+        );
+
+        console.log(`  ✓ 新视口 IDs: ${newViewportIds}`);
+
+        // 🔧 恢复视口状态
+        console.log('🔧 恢复视口状态...');
+        newViewportIds.forEach((vpId, index) => {
+          try {
+            const viewport = renderingEngine!.getViewport(vpId) as Types.IVolumeViewport;
+            if (!viewport) return;
+
+            const state = viewportStates[index];
+            if (state) {
+              // 恢复相机
+              if (state.camera) {
+                viewport.setCamera(state.camera);
+              }
+
+              // 恢复窗宽窗位
+              if (state.voiRange) {
+                viewport.setProperties({ voiRange: state.voiRange });
+              }
+            }
+          } catch (error) {
+            console.warn(`  ⚠️ 恢复视口 ${vpId} 状态失败:`, error);
+          }
+        });
+
+        // 销毁双序列工具组
+        console.log('🔧 清理双序列工具组...');
+        ['mpr-seq1', 'mpr-seq2'].forEach((groupId) => {
+          const toolGroup = ToolGroupManager.getToolGroup(groupId);
+          if (toolGroup) {
+            try {
+              ToolGroupManager.destroyToolGroup(groupId);
+              console.log(`  ✓ 已销毁工具组: ${groupId}`);
+            } catch (error) {
+              console.warn(`  ⚠️ 销毁工具组 ${groupId} 失败:`, error);
+            }
+          }
+        });
+
+        // 配置标准MPR工具组
+        console.log('🔧 配置标准 MPR 工具组...');
+        let toolGroup = ToolGroupManager.getToolGroup('mpr');
+        if (!toolGroup) {
+          toolGroup = ToolGroupManager.createToolGroup('mpr')!;
+          console.log('  ✓ 创建标准 MPR 工具组');
+
+          // 添加工具
+          try {
+            toolGroup.addTool(PanTool.toolName);
+            toolGroup.addTool(ZoomTool.toolName);
+            toolGroup.addTool(StackScrollTool.toolName);
+            toolGroup.addTool(WindowLevelTool.toolName);
+            toolGroup.addTool(LengthTool.toolName);
+            toolGroup.addTool(AngleTool.toolName);
+            toolGroup.addTool(BidirectionalTool.toolName);
+            toolGroup.addTool(ProbeTool.toolName);
+            toolGroup.addTool(RectangleROITool.toolName);
+            toolGroup.addTool(EllipticalROITool.toolName);
+            toolGroup.addTool(ScaleOverlayTool.toolName);
+            toolGroup.addTool(CrosshairsTool.toolName);
+          } catch (error) {
+            console.warn('添加工具失败:', error);
+          }
+        }
+
+        // 将视口添加到工具组
+        newViewportIds.forEach((vpId) => {
+          try {
+            toolGroup!.addViewport(vpId, 'mprEngine');
+          } catch (error) {
+            console.warn(`  ⚠️ 添加视口 ${vpId} 到工具组失败:`, error);
+          }
+        });
+
+        // 配置工具
+        toolGroup.setToolActive(PanTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Auxiliary }],
+        });
+        toolGroup.setToolActive(ZoomTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Secondary }],
+        });
+        toolGroup.setToolActive(StackScrollTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Wheel }],
+        });
+
+        if (showCrosshairs) {
+          toolGroup.setToolActive(CrosshairsTool.toolName, {
+            bindings: [{ mouseButton: MouseBindings.Primary }],
+          });
+        } else if (isWindowLevelActive) {
+          toolGroup.setToolActive(WindowLevelTool.toolName, {
+            bindings: [{ mouseButton: MouseBindings.Primary }],
+          });
+        }
+
+        console.log('  ✓ 工具组配置完成');
+
+        // 更新状态
+        setCurrentLayout('grid-1x3');
+        setViewportIds(newViewportIds);
+        setActiveViewportId(newViewportIds[0]);
+
+        // 更新视口相关状态
+        const newIndexMap: Record<string, number> = {};
+        const newTotalMap: Record<string, number> = {};
+        const newOrientationMap: Record<string, Enums.OrientationAxis> = {};
+        const newWindowLevelMap: Record<string, { center: number; width: number }> = {};
+
+        const orientations = [Enums.OrientationAxis.AXIAL, Enums.OrientationAxis.SAGITTAL, Enums.OrientationAxis.CORONAL];
+        newViewportIds.forEach((vpId, index) => {
+          newIndexMap[vpId] = 0;
+          newTotalMap[vpId] = 100;
+          newOrientationMap[vpId] = orientations[index];
+          newWindowLevelMap[vpId] = { center: 40, width: 400 };
+        });
+
+        setCurrentImageIndices(newIndexMap);
+        setTotalSlicesForViewports(newTotalMap);
+        setViewportOrientations(newOrientationMap);
+        setWindowLevels(newWindowLevelMap);
+
+        // 渲染视口
+        renderingEngine.renderViewports(newViewportIds);
+
+        console.log('✅ 双序列 MPR → 标准 MPR 切换完成');
+        console.log(`✅ 保留了序列 ${activeSeqIndex} 的 MPR 视图`);
+        return;
+      } catch (error) {
+        console.error('❌ 从双序列 MPR 切换到标准 MPR 失败:', error);
+        alert(`切换失败: ${error}`);
         return;
       }
     }
