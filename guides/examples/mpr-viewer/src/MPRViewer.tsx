@@ -905,6 +905,52 @@ function MPRViewer() {
         ['AXIAL', 'SAGITTAL', 'CORONAL']
       );
 
+      // 从新序列的第一张图像元数据中获取窗宽窗位信息并应用
+      const { metaData, utilities } = await import('@cornerstonejs/core');
+      const voi = metaData.get('voiLutModule', seriesInfo.imageIds[0]);
+
+      if (voi) {
+        const voiRange = utilities.windowLevel.toLowHighRange(
+          voi.windowWidth,
+          voi.windowCenter,
+          voi.voiLUTFunction
+        );
+
+        // 为每个视口设置窗宽窗位
+        const newWindowLevels: Record<string, { center: number; width: number }> = {};
+        ['AXIAL', 'SAGITTAL', 'CORONAL'].forEach((viewportId) => {
+          const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+          if (viewport) {
+            viewport.setProperties({ voiRange });
+
+            // 计算并存储窗宽窗位值用于显示
+            const width = voiRange.upper - voiRange.lower;
+            const center = (voiRange.upper + voiRange.lower) / 2;
+            newWindowLevels[viewportId] = { center, width };
+          }
+        });
+
+        // 更新 windowLevels state 以保持显示一致性
+        setWindowLevels(newWindowLevels);
+
+        console.log(`✅ 已应用新序列窗宽窗位: W=${voi.windowWidth} L=${voi.windowCenter}`);
+      } else {
+        // 如果元数据中没有窗宽窗位信息，使用默认值
+        const defaultVoiRange = { lower: -200, upper: 200 };
+        const newWindowLevels: Record<string, { center: number; width: number }> = {};
+
+        ['AXIAL', 'SAGITTAL', 'CORONAL'].forEach((viewportId) => {
+          const viewport = renderingEngine.getViewport(viewportId) as Types.IVolumeViewport;
+          if (viewport) {
+            viewport.setProperties({ voiRange: defaultVoiRange });
+            newWindowLevels[viewportId] = { center: 0, width: 400 };
+          }
+        });
+
+        setWindowLevels(newWindowLevels);
+        console.log('⚠️ 新序列元数据中无窗宽窗位信息，使用默认值');
+      }
+
       // 重新启用十字线工具（如果之前是激活的）
       if (toolGroup && crosshairsWasActive) {
         try {
