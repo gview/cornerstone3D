@@ -268,6 +268,8 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
                         </div>
                       ))}
                     </div>
+                  </div>
+                ))
               )}
           </div>
         )}
