@@ -20,6 +20,7 @@ import {
 } from '@cornerstonejs/tools';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { annotation } from '@cornerstonejs/tools';
+import { eventTarget } from '@cornerstonejs/core';
 
 const { selection } = annotation;
 import { useSlabThickness } from './hooks/useSlabThickness';
@@ -30,7 +31,7 @@ import SeriesPanel, { SeriesInfo } from './components/SeriesPanel';
 import Toolbar from './components/Toolbar';
 import ViewportOverlay from './components/ViewportOverlay';
 import { generateThumbnailsForSeries } from './utils/thumbnailGenerator';
-import { dynamicViewportManager } from './utils/dynamicViewportManager';
+import { dynamicViewportManager, DualSequenceConfig } from './utils/dynamicViewportManager';
 import type { IVolume } from '@cornerstonejs/core/types';
 import type { ViewportLayout } from './components/panels';
 
@@ -91,6 +92,8 @@ function MPRViewer() {
 
   const [renderingEngine, setRenderingEngine] = useState<RenderingEngine | null>(null);
   const [volume, setVolume] = useState<IVolume | null>(null);
+  const [volumeId, setVolumeId] = useState<string | null>(null); // 当前 volume ID
+  const [secondaryVolumeId, setSecondaryVolumeId] = useState<string | null>(null); // 第二个 volume ID（用于双序列布局）
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [imageIds, setImageIds] = useState<string[]>([]);
@@ -579,6 +582,7 @@ function MPRViewer() {
 
       // 合并状态更新
       setVolume(volume);
+      setVolumeId(volumeId); // 保存 volume ID
       if (newSeriesList.length > 0) {
         setCurrentSeriesUID(newSeriesList[0].seriesInstanceUID);
       }
@@ -896,6 +900,7 @@ function MPRViewer() {
       // 先更新状态
       setImageIds(seriesInfo.imageIds);
       setVolume(newVolume as IVolume);
+      setVolumeId(volumeId); // 保存新的 volume ID
       setCurrentSeriesUID(seriesInfo.seriesInstanceUID);
 
       // 为所有视口设置新的 volume
@@ -1018,32 +1023,62 @@ function MPRViewer() {
   const handleToolChange = (toolName: string) => {
     if (!renderingEngine) return;
 
-    // 根据视口数量选择合适的 toolGroup
+    // 🔧 检查是否是双序列 MPR 布局
+    const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
     const hasMultipleViewports = viewportIds.length > 1;
-    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
-    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
-
-    if (!toolGroup) {
-      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
-      return;
-    }
 
     // 如果要启用测量工具，需要先禁用十字线和窗宽窗位
     if (toolName !== 'Crosshairs' && toolName !== 'WindowLevel') {
-      // 强制隐藏十字线（无论当前状态如何）
-      if (toolGroup.hasTool(CrosshairsTool.toolName)) {
-        // 直接禁用十字线工具
-        toolGroup.setToolDisabled(CrosshairsTool.toolName);
+      if (isDualSequenceLayout) {
+        // 双序列布局：禁用两个工具组的十字线和窗宽窗位
+        const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+        const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+
+        if (toolGroupSeq1) {
+          if (toolGroupSeq1.hasTool(CrosshairsTool.toolName)) {
+            toolGroupSeq1.setToolDisabled(CrosshairsTool.toolName);
+          }
+          if (isWindowLevelActive) {
+            toolGroupSeq1.setToolDisabled(WindowLevelTool.toolName);
+          }
+        }
+
+        if (toolGroupSeq2) {
+          if (toolGroupSeq2.hasTool(CrosshairsTool.toolName)) {
+            toolGroupSeq2.setToolDisabled(CrosshairsTool.toolName);
+          }
+          if (isWindowLevelActive) {
+            toolGroupSeq2.setToolDisabled(WindowLevelTool.toolName);
+          }
+        }
 
         if (showCrosshairs) {
           setShowCrosshairs(false);
         }
-      }
+        if (isWindowLevelActive) {
+          setIsWindowLevelActive(false);
+        }
+      } else {
+        // 标准布局
+        const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
+        const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
-      // 强制禁用窗宽窗位
-      if (isWindowLevelActive) {
-        setIsWindowLevelActive(false);
-        toolGroup.setToolDisabled(WindowLevelTool.toolName);
+        if (!toolGroup) {
+          console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+          return;
+        }
+
+        if (toolGroup.hasTool(CrosshairsTool.toolName)) {
+          toolGroup.setToolDisabled(CrosshairsTool.toolName);
+          if (showCrosshairs) {
+            setShowCrosshairs(false);
+          }
+        }
+
+        if (isWindowLevelActive) {
+          setIsWindowLevelActive(false);
+          toolGroup.setToolDisabled(WindowLevelTool.toolName);
+        }
       }
     }
 
@@ -1051,15 +1086,12 @@ function MPRViewer() {
     if (toolName === CrosshairsTool.toolName && !hasMultipleViewports) {
       console.warn('⚠️ 单视口模式下不支持十字线工具，自动切换到窗宽窗位工具');
 
-      // 更新该工具的模式状态为 Active
       setToolModes((prev) => ({
         ...prev,
         [WindowLevelTool.toolName]: ToolModes.Active,
       }));
 
       setActiveTool(WindowLevelTool.toolName);
-
-      // 不继续处理 CrosshairsTool
       return;
     }
 
@@ -1075,17 +1107,30 @@ function MPRViewer() {
       EllipticalROITool.toolName,
     ];
 
-    // 只将其他 Active 的工具改为 Passive，保留其他工具的状态
-    // 注意: 需要同时更新两个 toolGroup 的状态
+    // 🔧 将其他 Active 的工具改为 Passive
+    // 需要更新所有相关的工具组
+    const allToolGroups = [];
+
+    // 添加 default 工具组
     const defaultToolGroup = ToolGroupManager.getToolGroup('default');
+    if (defaultToolGroup) allToolGroups.push(defaultToolGroup);
+
+    // 添加 mpr 工具组（标准布局）
     const mprToolGroup = ToolGroupManager.getToolGroup('mpr');
+    if (mprToolGroup) allToolGroups.push(mprToolGroup);
 
-    [defaultToolGroup, mprToolGroup].forEach((tg) => {
-      if (!tg) return;
+    // 添加双序列工具组
+    if (isDualSequenceLayout) {
+      const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+      const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+      if (toolGroupSeq1) allToolGroups.push(toolGroupSeq1);
+      if (toolGroupSeq2) allToolGroups.push(toolGroupSeq2);
+    }
 
+    // 更新所有工具组的状态
+    allToolGroups.forEach((tg) => {
       switchableTools.forEach((t) => {
         if (t !== toolName && toolModes[t] === ToolModes.Active) {
-          // 检查工具是否存在于该 toolGroup 中
           try {
             if (tg.hasTool(t)) {
               tg.setToolPassive(t);
@@ -1107,31 +1152,80 @@ function MPRViewer() {
       }
     });
 
-    // 激活选中的工具
-    if (switchableTools.includes(toolName)) {
-      toolGroup.setToolActive(toolName, {
-        bindings: [{ mouseButton: MouseBindings.Primary }],
-      });
+    // 🔧 激活选中的工具
+    if (isDualSequenceLayout) {
+      // 双序列布局：同时激活两个工具组
+      const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+      const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
 
-      // 更新该工具的模式状态为 Active
-      setToolModes((prev) => ({
-        ...prev,
-        [toolName]: ToolModes.Active,
-      }));
+      if (!toolGroupSeq1 || !toolGroupSeq2) {
+        console.error('❌ 无法获取双序列工具组');
+        return;
+      }
 
-      setActiveTool(toolName);
+      if (switchableTools.includes(toolName)) {
+        toolGroupSeq1.setToolActive(toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        toolGroupSeq2.setToolActive(toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setToolModes((prev) => ({
+          ...prev,
+          [toolName]: ToolModes.Active,
+        }));
+
+        setActiveTool(toolName);
+      } else {
+        // 默认激活 Length 工具
+        toolGroupSeq1.setToolActive(LengthTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        toolGroupSeq2.setToolActive(LengthTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setToolModes((prev) => ({
+          ...prev,
+          [LengthTool.toolName]: ToolModes.Active,
+        }));
+
+        setActiveTool(LengthTool.toolName);
+      }
     } else {
-      // 如果不是已知工具，默认激活 Length
-      toolGroup.setToolActive(LengthTool.toolName, {
-        bindings: [{ mouseButton: MouseBindings.Primary }],
-      });
+      // 标准布局
+      const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
+      const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
-      setToolModes((prev) => ({
-        ...prev,
-        [LengthTool.toolName]: ToolModes.Active,
-      }));
+      if (!toolGroup) {
+        console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+        return;
+      }
 
-      setActiveTool(LengthTool.toolName);
+      if (switchableTools.includes(toolName)) {
+        toolGroup.setToolActive(toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setToolModes((prev) => ({
+          ...prev,
+          [toolName]: ToolModes.Active,
+        }));
+
+        setActiveTool(toolName);
+      } else {
+        toolGroup.setToolActive(LengthTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setToolModes((prev) => ({
+          ...prev,
+          [LengthTool.toolName]: ToolModes.Active,
+        }));
+
+        setActiveTool(LengthTool.toolName);
+      }
     }
   };
 
@@ -1191,46 +1285,110 @@ function MPRViewer() {
   const handleToggleCrosshairs = () => {
     const newShowCrosshairs = !showCrosshairs;
 
-    // 根据视口数量选择合适的 toolGroup
-    const hasMultipleViewports = viewportIds.length > 1;
-    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
-    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
-
-    if (!toolGroup) {
-      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
-      return;
-    }
+    // 🔧 检查是否是双序列 MPR 布局
+    const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
 
     if (newShowCrosshairs) {
       // 检查是否支持十字线(需要多视口)
-      if (!hasMultipleViewports) {
+      if (viewportIds.length <= 1) {
         console.warn('⚠️ 单视口模式下不支持十字线工具');
         return;
       }
 
-      // 禁用窗宽窗位工具
-      if (isWindowLevelActive) {
-        setIsWindowLevelActive(false);
-        toolGroup.setToolDisabled(WindowLevelTool.toolName);
+      if (isDualSequenceLayout) {
+        // 🔧 双序列布局：需要同时更新两个工具组
+        const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+        const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+
+        if (!toolGroupSeq1 || !toolGroupSeq2) {
+          console.error('❌ 无法获取双序列工具组');
+          return;
+        }
+
+        // 禁用窗宽窗位工具
+        if (isWindowLevelActive) {
+          setIsWindowLevelActive(false);
+          toolGroupSeq1.setToolDisabled(WindowLevelTool.toolName);
+          toolGroupSeq2.setToolDisabled(WindowLevelTool.toolName);
+        }
+
+        // 将当前测量工具设为 Passive
+        if (activeTool) {
+          if (toolGroupSeq1.hasTool(activeTool)) {
+            toolGroupSeq1.setToolPassive(activeTool);
+          }
+          if (toolGroupSeq2.hasTool(activeTool)) {
+            toolGroupSeq2.setToolPassive(activeTool);
+          }
+        }
+
+        // 启用两个工具组的十字线
+        toolGroupSeq1.setToolActive(CrosshairsTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        toolGroupSeq2.setToolActive(CrosshairsTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setShowCrosshairs(true);
+        console.log('✅ 已启用双序列十字线');
+      } else {
+        // 标准布局：使用单个 mpr 工具组
+        const toolGroupId = 'mpr';
+        const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+        if (!toolGroup) {
+          console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+          return;
+        }
+
+        // 禁用窗宽窗位工具
+        if (isWindowLevelActive) {
+          setIsWindowLevelActive(false);
+          toolGroup.setToolDisabled(WindowLevelTool.toolName);
+        }
+
+        // 将当前测量工具设为 Passive
+        if (activeTool && toolGroup.hasTool(activeTool)) {
+          toolGroup.setToolPassive(activeTool);
+        }
+
+        // 启用十字线工具
+        toolGroup.setToolActive(CrosshairsTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setShowCrosshairs(true);
+        console.log('✅ 已启用十字线');
       }
-
-      // 将当前测量工具设为 Passive（可见但不可编辑）
-      if (activeTool && toolGroup.hasTool(activeTool)) {
-        toolGroup.setToolPassive(activeTool);
-      }
-
-      // 启用十字线工具（设置为 active 模式）
-      toolGroup.setToolActive(CrosshairsTool.toolName, {
-        bindings: [{ mouseButton: MouseBindings.Primary }],
-      });
-
-      setShowCrosshairs(true);
-      console.log('✅ 已启用十字线');
     } else {
-      // 完全禁用十字线工具
-      toolGroup.setToolDisabled(CrosshairsTool.toolName);
-      setShowCrosshairs(false);
-      console.log('✅ 已禁用十字线');
+      // 禁用十字线
+      if (isDualSequenceLayout) {
+        const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+        const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+
+        if (toolGroupSeq1) {
+          toolGroupSeq1.setToolDisabled(CrosshairsTool.toolName);
+        }
+        if (toolGroupSeq2) {
+          toolGroupSeq2.setToolDisabled(CrosshairsTool.toolName);
+        }
+
+        setShowCrosshairs(false);
+        console.log('✅ 已禁用双序列十字线');
+      } else {
+        const toolGroupId = 'mpr';
+        const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+        if (!toolGroup) {
+          console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+          return;
+        }
+
+        toolGroup.setToolDisabled(CrosshairsTool.toolName);
+        setShowCrosshairs(false);
+        console.log('✅ 已禁用十字线');
+      }
     }
   };
 
@@ -1238,42 +1396,110 @@ function MPRViewer() {
   const handleToggleWindowLevel = () => {
     const newIsActive = !isWindowLevelActive;
 
-    // 根据视口数量选择合适的 toolGroup
-    const hasMultipleViewports = viewportIds.length > 1;
-    const toolGroupId = hasMultipleViewports ? 'mpr' : 'default';
-    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
-
-    if (!toolGroup) {
-      console.error(`❌ 无法获取工具组: ${toolGroupId}`);
-      return;
-    }
+    // 🔧 检查是否是双序列 MPR 布局
+    const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
 
     if (newIsActive) {
-      // 禁用十字线
-      if (showCrosshairs) {
-        setShowCrosshairs(false);
-        if (toolGroup.hasTool(CrosshairsTool.toolName)) {
-          toolGroup.setToolDisabled(CrosshairsTool.toolName);
+      if (isDualSequenceLayout) {
+        // 🔧 双序列布局：需要同时更新两个工具组
+        const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+        const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+
+        if (!toolGroupSeq1 || !toolGroupSeq2) {
+          console.error('❌ 无法获取双序列工具组');
+          return;
         }
+
+        // 禁用十字线
+        if (showCrosshairs) {
+          setShowCrosshairs(false);
+          if (toolGroupSeq1.hasTool(CrosshairsTool.toolName)) {
+            toolGroupSeq1.setToolDisabled(CrosshairsTool.toolName);
+          }
+          if (toolGroupSeq2.hasTool(CrosshairsTool.toolName)) {
+            toolGroupSeq2.setToolDisabled(CrosshairsTool.toolName);
+          }
+        }
+
+        // 将当前测量工具设为 Passive
+        if (activeTool) {
+          if (toolGroupSeq1.hasTool(activeTool)) {
+            toolGroupSeq1.setToolPassive(activeTool);
+          }
+          if (toolGroupSeq2.hasTool(activeTool)) {
+            toolGroupSeq2.setToolPassive(activeTool);
+          }
+        }
+
+        // 启用两个工具组的窗宽窗位
+        toolGroupSeq1.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+        toolGroupSeq2.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setIsWindowLevelActive(true);
+        console.log('✅ 已启用双序列窗宽窗位调节');
+      } else {
+        // 标准布局：使用单个 mpr 工具组
+        const toolGroupId = 'mpr';
+        const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+        if (!toolGroup) {
+          console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+          return;
+        }
+
+        // 禁用十字线
+        if (showCrosshairs) {
+          setShowCrosshairs(false);
+          if (toolGroup.hasTool(CrosshairsTool.toolName)) {
+            toolGroup.setToolDisabled(CrosshairsTool.toolName);
+          }
+        }
+
+        // 将当前测量工具设为 Passive
+        if (activeTool && toolGroup.hasTool(activeTool)) {
+          toolGroup.setToolPassive(activeTool);
+        }
+
+        // 启用窗宽窗位工具
+        toolGroup.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: MouseBindings.Primary }],
+        });
+
+        setIsWindowLevelActive(true);
+        console.log('✅ 已启用窗宽窗位调节');
       }
-
-      // 将当前测量工具设为 Passive（可见但不可编辑）
-      if (activeTool && toolGroup.hasTool(activeTool)) {
-        toolGroup.setToolPassive(activeTool);
-      }
-
-      // 启用窗宽窗位工具
-      toolGroup.setToolActive(WindowLevelTool.toolName, {
-        bindings: [{ mouseButton: MouseBindings.Primary }],
-      });
-
-      setIsWindowLevelActive(true);
-      console.log('✅ 已启用窗宽窗位调节');
     } else {
-      // 禁用窗宽窗位工具
-      toolGroup.setToolDisabled(WindowLevelTool.toolName);
-      setIsWindowLevelActive(false);
-      console.log('✅ 已禁用窗宽窗位调节');
+      // 禁用窗宽窗位
+      if (isDualSequenceLayout) {
+        const toolGroupSeq1 = ToolGroupManager.getToolGroup('mpr-seq1');
+        const toolGroupSeq2 = ToolGroupManager.getToolGroup('mpr-seq2');
+
+        if (toolGroupSeq1) {
+          toolGroupSeq1.setToolDisabled(WindowLevelTool.toolName);
+        }
+        if (toolGroupSeq2) {
+          toolGroupSeq2.setToolDisabled(WindowLevelTool.toolName);
+        }
+
+        setIsWindowLevelActive(false);
+        console.log('✅ 已禁用双序列窗宽窗位调节');
+      } else {
+        const toolGroupId = 'mpr';
+        const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
+        if (!toolGroup) {
+          console.error(`❌ 无法获取工具组: ${toolGroupId}`);
+          return;
+        }
+
+        toolGroup.setToolDisabled(WindowLevelTool.toolName);
+        setIsWindowLevelActive(false);
+        console.log('✅ 已禁用窗宽窗位调节');
+      }
     }
   };
 
@@ -1474,11 +1700,293 @@ function MPRViewer() {
 
   // 处理布局切换
   const handleLayoutChange = async (layout: ViewportLayout) => {
-    if (!renderingEngine || !volume) {
+    console.log('🔄 布局切换请求:', layout);
+
+    if (!renderingEngine || !volume || !volumeId) {
       console.warn('无法切换布局: 渲染引擎或体积数据未初始化');
       return;
     }
 
+    // 处理双序列 MPR 布局
+    if (layout === 'dual-mpr') {
+      console.log('🔄 切换到双序列 MPR 布局');
+
+      // 检查是否有足够的序列
+      if (seriesList.length < 2) {
+        alert('双序列 MPR 布局需要至少加载 2 个序列。当前只有 ' + seriesList.length + ' 个序列。');
+        return;
+      }
+
+      try {
+        // 🔧 关键修复：先更新布局状态，让 React 卸载静态组件
+        // 这样可以避免 React removeChild 错误
+        const currentViewportIds = viewportIds;
+
+        // 先设置 layout 为临时值，触发 React 卸载静态 JSX
+        setCurrentLayout('dual-mpr' as any);
+        setViewportIds([]);
+
+        // 等待 React 完成卸载
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // 初始化视口管理器，传递事件处理器
+        dynamicViewportManager.initialize(renderingEngine, viewportsGridRef.current!, {
+          onViewportClick: handleViewportClick,
+          onViewportDoubleClick: handleViewportDoubleClick,
+          getActiveViewportId: () => activeViewportId,
+        });
+
+        // 获取第二个序列的 volume ID
+        const secondSeries = seriesList.find(s => s.seriesInstanceUID !== currentSeriesUID);
+        if (!secondSeries) {
+          alert('无法找到第二个序列');
+          return;
+        }
+
+        // 创建或获取第二个序列的 volume
+        let volumeId2 = secondaryVolumeId;
+        if (!volumeId2) {
+          volumeId2 = `volume-${secondSeries.seriesInstanceUID}`;
+          const secondVolume = await volumeLoader.createAndCacheVolume(volumeId2, {
+            imageIds: secondSeries.imageIds,
+          });
+          secondVolume.load();
+          setSecondaryVolumeId(volumeId2);
+        }
+
+        // 应用双序列 MPR 布局
+        const dualConfig: DualSequenceConfig = {
+          volumeId1: volumeId,
+          volumeId2: volumeId2,
+        };
+
+        const newViewportIds = await dynamicViewportManager.applyDualSequenceMPRLayout(
+          dualConfig,
+          currentViewportIds
+        );
+
+        // 更新 viewportIds 状态
+        setViewportIds(newViewportIds);
+
+        // 更新视口相关状态
+        const newIndexMap: Record<string, number> = {};
+        const newTotalMap: Record<string, number> = {};
+        const newOrientationMap: Record<string, Enums.OrientationAxis> = {};
+        const newWindowLevelMap: Record<string, { center: number; width: number }> = {};
+
+        const orientations = [Enums.OrientationAxis.AXIAL, Enums.OrientationAxis.SAGITTAL, Enums.OrientationAxis.CORONAL];
+
+        newViewportIds.forEach((viewportId, index) => {
+          newIndexMap[viewportId] = 0;
+          newTotalMap[viewportId] = 100; // 临时值，会动态更新
+          newOrientationMap[viewportId] = orientations[index % 3];
+          newWindowLevelMap[viewportId] = { center: 40, width: 400 };
+        });
+
+        setCurrentImageIndices(newIndexMap);
+        setTotalSlicesForViewports(newTotalMap);
+        setViewportOrientations(newOrientationMap);
+        setWindowLevels(newWindowLevelMap);
+
+        // 🔧 双序列布局需要两个独立的工具组，每个序列一个
+        // 这样十字线可以在每个序列内部独立联动
+        console.log('🔧 开始配置双序列 MPR 工具组...');
+
+        const toolGroupSeq1Id = 'mpr-seq1';
+        const toolGroupSeq2Id = 'mpr-seq2';
+
+        let toolGroupSeq1 = ToolGroupManager.getToolGroup(toolGroupSeq1Id);
+        let toolGroupSeq2 = ToolGroupManager.getToolGroup(toolGroupSeq2Id);
+
+        // 如果工具组不存在，创建它们
+        if (!toolGroupSeq1) {
+          toolGroupSeq1 = ToolGroupManager.createToolGroup(toolGroupSeq1Id)!;
+          console.log('✅ 创建序列 1 工具组:', toolGroupSeq1Id);
+
+          // 添加工具到序列 1 工具组
+          try {
+            toolGroupSeq1.addTool(PanTool.toolName);
+            toolGroupSeq1.addTool(ZoomTool.toolName);
+            toolGroupSeq1.addTool(StackScrollTool.toolName);
+            toolGroupSeq1.addTool(WindowLevelTool.toolName);
+            toolGroupSeq1.addTool(LengthTool.toolName);
+            toolGroupSeq1.addTool(AngleTool.toolName);
+            toolGroupSeq1.addTool(BidirectionalTool.toolName);
+            toolGroupSeq1.addTool(ProbeTool.toolName);
+            toolGroupSeq1.addTool(RectangleROITool.toolName);
+            toolGroupSeq1.addTool(EllipticalROITool.toolName);
+            toolGroupSeq1.addTool(ScaleOverlayTool.toolName);
+            toolGroupSeq1.addTool(CrosshairsTool.toolName);
+            console.log('✅ 序列 1 工具已添加');
+          } catch (error) {
+            // 工具已添加，忽略
+          }
+        }
+
+        if (!toolGroupSeq2) {
+          toolGroupSeq2 = ToolGroupManager.createToolGroup(toolGroupSeq2Id)!;
+          console.log('✅ 创建序列 2 工具组:', toolGroupSeq2Id);
+
+          // 添加工具到序列 2 工具组
+          try {
+            toolGroupSeq2.addTool(PanTool.toolName);
+            toolGroupSeq2.addTool(ZoomTool.toolName);
+            toolGroupSeq2.addTool(StackScrollTool.toolName);
+            toolGroupSeq2.addTool(WindowLevelTool.toolName);
+            toolGroupSeq2.addTool(LengthTool.toolName);
+            toolGroupSeq2.addTool(AngleTool.toolName);
+            toolGroupSeq2.addTool(BidirectionalTool.toolName);
+            toolGroupSeq2.addTool(ProbeTool.toolName);
+            toolGroupSeq2.addTool(RectangleROITool.toolName);
+            toolGroupSeq2.addTool(EllipticalROITool.toolName);
+            toolGroupSeq2.addTool(ScaleOverlayTool.toolName);
+            toolGroupSeq2.addTool(CrosshairsTool.toolName);
+            console.log('✅ 序列 2 工具已添加');
+          } catch (error) {
+            // 工具已添加，忽略
+          }
+        }
+
+        // 配置序列 1 工具组（视口 0-2）
+        console.log('🔧 配置序列 1 工具组（视口 0-2）...');
+        newViewportIds.slice(0, 3).forEach((viewportId) => {
+          try {
+            toolGroupSeq1!.addViewport(viewportId, 'mprEngine');
+            console.log(`  ✓ 序列1 视口 ${viewportId} 已添加到工具组`);
+          } catch (error) {
+            console.warn(`添加视口 ${viewportId} 到序列1工具组失败:`, error);
+          }
+        });
+
+        // 配置序列 2 工具组（视口 3-5）
+        console.log('🔧 配置序列 2 工具组（视口 3-5）...');
+        newViewportIds.slice(3, 6).forEach((viewportId) => {
+          try {
+            toolGroupSeq2!.addViewport(viewportId, 'mprEngine');
+            console.log(`  ✓ 序列2 视口 ${viewportId} 已添加到工具组`);
+          } catch (error) {
+            console.warn(`添加视口 ${viewportId} 到序列2工具组失败:`, error);
+          }
+        });
+
+        // 为两个工具组配置基本工具
+        [toolGroupSeq1!, toolGroupSeq2!].forEach((toolGroup, groupIndex) => {
+          const seqName = groupIndex === 0 ? '序列1' : '序列2';
+          console.log(`🔧 配置 ${seqName} 工具...`);
+
+          // 平移 - 中键
+          toolGroup.setToolActive(PanTool.toolName, {
+            bindings: [{ mouseButton: MouseBindings.Auxiliary }],
+          });
+
+          // 缩放 - 右键
+          toolGroup.setToolActive(ZoomTool.toolName, {
+            bindings: [{ mouseButton: MouseBindings.Secondary }],
+          });
+
+          // 滚轮换层 - 滚轮
+          toolGroup.setToolActive(StackScrollTool.toolName, {
+            bindings: [{ mouseButton: MouseBindings.Wheel }],
+          });
+
+          // 🔧 配置主鼠标按钮工具（根据当前状态）
+          if (showCrosshairs) {
+            // 十字线工具
+            toolGroup.setToolActive(CrosshairsTool.toolName, {
+              bindings: [{ mouseButton: MouseBindings.Primary }],
+            });
+            console.log(`  ✓ ${seqName} 十字线工具已启用`);
+          } else if (isWindowLevelActive) {
+            // 窗宽窗位工具
+            toolGroup.setToolActive(WindowLevelTool.toolName, {
+              bindings: [{ mouseButton: MouseBindings.Primary }],
+            });
+            console.log(`  ✓ ${seqName} 窗宽窗位工具已启用`);
+          } else if (activeTool) {
+            // 测量工具
+            toolGroup.setToolActive(activeTool, {
+              bindings: [{ mouseButton: MouseBindings.Primary }],
+            });
+            console.log(`  ✓ ${seqName} 测量工具 ${activeTool} 已启用`);
+          } else {
+            // 默认：长度测量工具
+            toolGroup.setToolActive(LengthTool.toolName, {
+              bindings: [{ mouseButton: MouseBindings.Primary }],
+            });
+            console.log(`  ✓ ${seqName} 长度测量工具已启用（默认）`);
+          }
+        });
+
+        console.log('✅ 双序列 MPR 工具组配置完成（两个独立工具组）');
+
+        // 🔧 添加标注事件监听器，在双序列布局下记录标注所属序列
+        const handleAnnotationAdded = (event: any) => {
+          const { annotation } = event.detail;
+
+          // 确定标注是在哪个视口创建的
+          const viewportId = annotation.metadata.viewpointId;
+          const sequenceIndex = newViewportIds.findIndex(id => id === viewportId);
+
+          if (sequenceIndex !== -1) {
+            // 0-2: 序列 1, 3-5: 序列 2
+            const sequenceNumber = sequenceIndex < 3 ? 1 : 2;
+            const targetVolumeId = sequenceIndex < 3 ? volumeId : volumeId2;
+
+            // 将 volumeId 信息添加到标注元数据
+            annotation.metadata.volumeId = targetVolumeId;
+            annotation.metadata.sequenceIndex = sequenceIndex;
+            annotation.metadata.sequenceNumber = sequenceNumber;
+
+            console.log(`📝 标注已添加到序列 ${sequenceNumber} (${viewportId})，volumeId: ${targetVolumeId}`);
+          }
+        };
+
+        // 添加事件监听器
+        eventTarget.addEventListener('annotationAdded', handleAnnotationAdded as any);
+        console.log('✅ 已添加标注序列追踪监听器');
+
+        console.log(`✅ 双序列 MPR 布局已应用，共 ${newViewportIds.length} 个视口`);
+        return;
+      } catch (error) {
+        console.error('❌ 应用双序列 MPR 布局失败:', error);
+        alert(`双序列 MPR 布局切换失败: ${error}`);
+        return;
+      }
+    }
+
+    // 处理其他协议布局（暂时映射到标准三视图）
+    if (
+      layout === 'mpr' ||
+      layout === '3d-four-up' ||
+      layout === '3d-main' ||
+      layout === 'axial-primary' ||
+      layout === '3d-only' ||
+      layout === '3d-primary' ||
+      layout === 'frame-view' ||
+      layout === 'advanced'
+    ) {
+      // 这些协议布局暂时映射到标准的 1×3 MPR 布局
+      console.log(`🔄 协议布局 "${layout}" 暂时映射到标准 MPR 布局`);
+
+      // 显示提示信息
+      const layoutNames: Record<string, string> = {
+        'mpr': 'MPR 三视图',
+        '3d-four-up': '3D 四视图',
+        '3d-main': '3D 主视图',
+        'axial-primary': '轴位主视图',
+        '3d-only': '仅 3D',
+        '3d-primary': '3D 为主',
+        'frame-view': '帧视图',
+        'advanced': '高级视图',
+      };
+
+      const layoutName = layoutNames[layout] || layout;
+      console.log(`ℹ️ "${layoutName}" 协议布局暂时使用标准三视图显示`);
+      // 可以选择显示用户提示：
+      // alert(`"${layoutName}" 协议布局功能正在开发中，暂时使用标准 MPR 三视图显示。`);
+    }
+
+    // 处理其他布局（原始逻辑）
     // 计算新布局的视口数量
     const newViewportCount = getViewportCountFromLayout(layout);
 
@@ -1760,6 +2268,8 @@ function MPRViewer() {
                 onToggleCollapse={handleToggleAnnotationsPanelCollapse}
                 panelPosition="left"
                 onPanelPositionChange={handleAnnotationsPanelPositionChange}
+                volumeId={volumeId}
+                secondaryVolumeId={secondaryVolumeId}
               />
             )}
           </div>
@@ -1795,7 +2305,9 @@ function MPRViewer() {
               gridTemplateAreas: currentLayout === 'grid-1-2' ? '"main top" "main bottom"' : undefined,
             }}
           >
-            {/* 静态初始结构 - 固定的三个视口用于初始加载和简单布局 */}
+            {/* 静态初始结构 - 只在初始布局（grid-1x3）时渲染 */}
+            {currentLayout === 'grid-1x3' && viewportIds[0] === 'AXIAL' ? (
+            <>
             <div
               className={`viewport-container${activeViewportId === 'AXIAL' ? ' active' : ''}${isMaximized && maximizedViewportId === 'AXIAL' ? ' maximized' : ''}${isMaximized && maximizedViewportId !== 'AXIAL' ? ' viewport-container-hidden' : ''}${currentLayout === 'grid-1-2' ? ' grid-1-2-main' : ''}`}
               onClick={() => handleViewportClick('AXIAL')}
@@ -1882,6 +2394,8 @@ function MPRViewer() {
                 isActive={activeViewportId === 'CORONAL'}
               />
             </div>
+            </>
+            ) : null}
           </div>
 
           {/* 体积信息 */}
@@ -1902,6 +2416,8 @@ function MPRViewer() {
             onToggleCollapse={handleToggleAnnotationsPanelCollapse}
             panelPosition="right"
             onPanelPositionChange={handleAnnotationsPanelPositionChange}
+            volumeId={volumeId}
+            secondaryVolumeId={secondaryVolumeId}
           />
         )}
       </div>

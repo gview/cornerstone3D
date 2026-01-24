@@ -33,6 +33,8 @@ interface AnnotationsPanelProps {
   onClose?: () => void;
   panelPosition?: 'left' | 'right';
   onPanelPositionChange?: (position: 'left' | 'right') => void;
+  volumeId?: string | null;  // 主 volume ID
+  secondaryVolumeId?: string | null;  // 第二个 volume ID（用于双序列布局）
 }
 
 const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
@@ -43,6 +45,8 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
   onClose,
   panelPosition = 'right',
   onPanelPositionChange,
+  volumeId,
+  secondaryVolumeId,
 }) => {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -275,10 +279,108 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
     }
   };
 
+  // 🔧 从 imageId 中提取 volume ID
+  // ImageId 格式通常为: imageIdPrefix:imageFrameIndex:volumeId
+  // 例如: "wadouri:file://path/file.dcm:0:volume-xxx" 或 "imageId:123:volume-xxx"
+  // 也可能是简化的格式: "dicomfile:76"（这种情况下无法提取 volume 信息）
+  const extractVolumeIdFromImageId = (imageId: string): string | null => {
+    try {
+      console.log('🔍 分析 imageId:', imageId);
+
+      // 方法1: 尝试从 imageId 字符串中提取 volume ID
+      // volume ID 通常在最后一个冒号之后
+      const parts = imageId.split(':');
+      if (parts.length >= 3) {
+        const potentialVolumeId = parts[parts.length - 1];
+        // 检查是否以 'volume-' 或 'my-volume-id-' 开头
+        if (potentialVolumeId.startsWith('volume-') || potentialVolumeId.startsWith('my-volume-id-')) {
+          console.log('✅ 从冒号分隔提取到 volumeId:', potentialVolumeId);
+          return potentialVolumeId;
+        }
+      }
+
+      // 方法2: 如果上述方法失败，尝试正则匹配
+      const volumeMatch = imageId.match(/(volume-[^\s:]+|my-volume-id-[^\s:]+)/);
+      if (volumeMatch) {
+        console.log('✅ 从正则匹配提取到 volumeId:', volumeMatch[1]);
+        return volumeMatch[1];
+      }
+
+      // 方法3: 检查是否是简化的 imageId 格式（如 "dicomfile:76"）
+      if (parts.length === 2 && parts[0].startsWith('dicomfile')) {
+        console.warn('⚠️ imageId 是简化格式（dicomfile:N），无法从中提取 volume 信息');
+        console.log('💡 提示: 这种格式没有包含 volumeId 信息，需要通过其他方式（如当前激活的视口）来判断所属序列');
+        return null;
+      }
+
+      console.warn('⚠️ 无法从 imageId 提取 volumeId:', imageId);
+      return null;
+    } catch (error) {
+      console.error('❌ 提取 volumeId 失败:', error);
+      return null;
+    }
+  };
+
   // 跳转到测量的位置
   const jumpToAnnotation = (annotation: Annotation) => {
     try {
       if (!renderingEngine) return;
+
+      // 🔧 判断是否是双序列 MPR 布局
+      const isDualSequenceLayout = viewportIds.length === 6 && secondaryVolumeId;
+
+      // 🔧 确定测量属于哪个序列
+      let targetSequenceIndex = 0; // 默认序列 1 (索引 0)
+
+      if (isDualSequenceLayout) {
+        // 🔧 方法1：优先使用自定义 metadata.volumeId（由 annotationAdded 事件监听器添加）
+        if (annotation.metadata.volumeId) {
+          const annotationVolumeId = annotation.metadata.volumeId;
+
+          console.log('🔍 使用自定义 metadata.volumeId:', annotationVolumeId);
+          console.log('🔧 当前主 volumeId:', volumeId);
+          console.log('🔧 当前副 volumeId:', secondaryVolumeId);
+
+          // 判断属于哪个序列
+          if (annotationVolumeId === secondaryVolumeId) {
+            targetSequenceIndex = 1; // 序列 2
+            console.log('✅ 测量属于序列 2（自定义元数据）');
+          } else if (annotationVolumeId === volumeId) {
+            targetSequenceIndex = 0; // 序列 1
+            console.log('✅ 测量属于序列 1（自定义元数据）');
+          } else {
+            console.warn('⚠️ volumeId 不匹配，默认使用序列 1');
+          }
+        }
+        // 🔧 方法2：使用 metadata.sequenceIndex（由 annotationAdded 事件监听器添加）
+        else if (annotation.metadata.sequenceIndex !== undefined) {
+          const seqIndex = annotation.metadata.sequenceIndex as number;
+          targetSequenceIndex = seqIndex < 3 ? 0 : 1;
+          console.log(`✅ 使用 sequenceIndex: ${seqIndex}，跳转到序列 ${targetSequenceIndex + 1}`);
+        }
+        // 🔧 方法3：从 referencedImageId 提取 volumeId（备用方法）
+        else if (annotation.metadata.referencedImageId) {
+          const annotationVolumeId = extractVolumeIdFromImageId(annotation.metadata.referencedImageId);
+
+          console.log('🔍 测量的 referencedImageId:', annotation.metadata.referencedImageId);
+          console.log('🔍 提取的 volumeId:', annotationVolumeId);
+
+          // 判断属于哪个序列
+          if (annotationVolumeId === secondaryVolumeId) {
+            targetSequenceIndex = 1; // 序列 2
+            console.log('✅ 测量属于序列 2（从 imageId 提取）');
+          } else if (annotationVolumeId === volumeId) {
+            targetSequenceIndex = 0; // 序列 1
+            console.log('✅ 测量属于序列 1（从 imageId 提取）');
+          } else {
+            console.warn('⚠️ 无法从 referencedImageId 提取 volumeId，使用序列 1（默认）');
+            console.warn('💡 提示：此标注可能是在添加序列追踪功能之前创建的');
+          }
+        } else {
+          console.warn('⚠️ 标注缺少序列信息元数据，默认使用序列 1');
+          console.warn('💡 提示：重新创建标注以启用智能跳转功能');
+        }
+      }
 
       // 从测量数据中获取空间坐标
       let targetPoint: { x: number; y: number; z: number } | undefined;
@@ -334,10 +436,31 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
         return;
       }
 
-      // 获取三个视口的相机
-      const axialViewport = renderingEngine.getViewport(viewportIds[0]) as Types.IVolumeViewport;
-      const sagittalViewport = renderingEngine.getViewport(viewportIds[1]) as Types.IVolumeViewport;
-      const coronalViewport = renderingEngine.getViewport(viewportIds[2]) as Types.IVolumeViewport;
+      // 🔧 根据布局和序列选择视口
+      let axialViewport, sagittalViewport, coronalViewport;
+      let targetViewportIds: string[];
+
+      if (isDualSequenceLayout) {
+        // 🔧 双序列 MPR 布局：根据目标序列选择视口
+        const seqStartIndex = targetSequenceIndex * 3; // 序列 1: 0, 序列 2: 3
+
+        console.log(`🔧 双序列 MPR 布局，使用序列 ${targetSequenceIndex + 1} 的视口（索引 ${seqStartIndex}-${seqStartIndex + 2}）`);
+
+        axialViewport = renderingEngine.getViewport(viewportIds[seqStartIndex]) as Types.IVolumeViewport;
+        sagittalViewport = renderingEngine.getViewport(viewportIds[seqStartIndex + 1]) as Types.IVolumeViewport;
+        coronalViewport = renderingEngine.getViewport(viewportIds[seqStartIndex + 2]) as Types.IVolumeViewport;
+        targetViewportIds = [
+          viewportIds[seqStartIndex],
+          viewportIds[seqStartIndex + 1],
+          viewportIds[seqStartIndex + 2]
+        ];
+      } else {
+        // 标准三视图布局
+        axialViewport = renderingEngine.getViewport(viewportIds[0]) as Types.IVolumeViewport;
+        sagittalViewport = renderingEngine.getViewport(viewportIds[1]) as Types.IVolumeViewport;
+        coronalViewport = renderingEngine.getViewport(viewportIds[2]) as Types.IVolumeViewport;
+        targetViewportIds = viewportIds;
+      }
 
       if (!axialViewport || !sagittalViewport || !coronalViewport) {
         console.warn('⚠️ 无法获取视口');
@@ -386,12 +509,13 @@ const AnnotationsPanel: React.FC<AnnotationsPanelProps> = ({
       sagittalViewport.setCamera(sagittalCamera);
       coronalViewport.setCamera(coronalCamera);
 
-      renderingEngine.renderViewports(viewportIds);
+      renderingEngine.renderViewports(targetViewportIds);
 
       const xStr = (targetPoint.x ?? 0).toFixed(2);
       const yStr = (targetPoint.y ?? 0).toFixed(2);
       const zStr = (targetPoint.z ?? 0).toFixed(2);
       console.log(`✅ 已跳转到测量位置: [${xStr}, ${yStr}, ${zStr}]`);
+      console.log(`✅ 使用的视口索引: ${targetViewportIds.join(', ')}`);
     } catch (error) {
       console.error('❌ 跳转到测量位置失败:', error);
     }
