@@ -52,11 +52,25 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
   onToggleCollapse,
 }) => {
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
+  const [collapsedStudies, setCollapsedStudies] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
 
   // 处理双击序列
   const handleDoubleClick = (seriesInfo: SeriesInfo) => {
     onLoadSeries(seriesInfo);
+  };
+
+  // 切换检查的收起/展开状态
+  const handleToggleStudy = (studyInstanceUID: string) => {
+    setCollapsedStudies((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(studyInstanceUID)) {
+        newSet.delete(studyInstanceUID);
+      } else {
+        newSet.add(studyInstanceUID);
+      }
+      return newSet;
+    });
   };
 
   // 获取默认缩略图样式
@@ -203,11 +217,18 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
                           )}
                         </div>
                       </div>
+                      <button
+                        className="study-collapse-button"
+                        onClick={() => handleToggleStudy(study.studyInstanceUID)}
+                        title={collapsedStudies.has(study.studyInstanceUID) ? '展开序列' : '收起序列'}
+                      >
+                        {collapsedStudies.has(study.studyInstanceUID) ? '▶' : '▼'}
+                      </button>
                     </div>
 
                     {/* 序列列表 */}
-                    <div className="study-series-list">
-                      {study.series.map((series) => (
+                    <div className={`study-series-list ${collapsedStudies.has(study.studyInstanceUID) ? 'collapsed' : ''}`}>
+                      {!collapsedStudies.has(study.studyInstanceUID) && study.series.map((series) => (
                         <div
                           key={series.seriesInstanceUID}
                           className={`series-item-compact ${
@@ -247,8 +268,6 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
                         </div>
                       ))}
                     </div>
-                  </div>
-                ))
               )}
           </div>
         )}
@@ -341,6 +360,32 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
           border-radius: 4px;
           padding: 6px 8px;
           margin-bottom: 4px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .study-collapse-button {
+          background: none;
+          border: none;
+          color: #cccccc;
+          font-size: 12px;
+          cursor: pointer;
+          padding: 4px 8px;
+          line-height: 1;
+          opacity: 0.7;
+          transition: opacity 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          flex-shrink: 0;
+        }
+
+        .study-collapse-button:hover {
+          opacity: 1;
+          background: #3e3e42;
         }
 
         .study-info {
@@ -394,6 +439,11 @@ const SeriesPanel: React.FC<SeriesPanelProps> = ({
           flex-direction: column;
           gap: 2px;
           padding-left: 8px;
+          transition: all 0.3s ease;
+        }
+
+        .study-series-list.collapsed {
+          display: none;
         }
 
         .series-item-compact {
